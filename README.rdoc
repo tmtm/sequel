@@ -1,22 +1,13 @@
-== Sequel: The Database Toolkit for Ruby
+== Sequel: Ruby のデータベースツールキット
 
-Sequel is a simple, flexible, and powerful SQL database access
-toolkit for Ruby.
+Sequel はシンプルで柔軟でパワフルな、Ruby の SQL データベースアクセスツールキットです。
 
-* Sequel provides thread safety, connection pooling and a concise
-  DSL for constructing SQL queries and table schemas.
-* Sequel includes a comprehensive ORM layer for mapping
-  records to Ruby objects and handling associated records.
-* Sequel supports advanced database features such as prepared
-  statements, bound variables, stored procedures, savepoints,
-  two-phase commit, transaction isolation, master/slave
-  configurations, and database sharding.
-* Sequel currently has adapters for ADO, Amalgalite, CUBRID,
-  DataObjects, DB2, DBI, Firebird, IBM_DB, Informix, JDBC, MySQL,
-  Mysql2, ODBC, OpenBase, Oracle, PostgreSQL, SQLite3, Swift, and
-  TinyTDS.
+* Sequel はスレッド安全、コネクションプーリング、SQLクエリを構築するための簡潔な DSL、テーブルスキーマを提供します。
+* Sequel は、レコードを Ruby オブジェクトにマッピングし、関連レコードを操作するための包括的な ORM 層を含んでいます。
+* Sequel は次のような先進的なデータベース機能をサポートします: プリペアドステートメント、bound variables,、ストアドプロシジャ、セーブポイント、ツーフェーズコミット、トランザクション分離、マスター／スレーブ構成、データベースシャーディング
+* Sequel は現在次のアダプタを持っています: ADO, Amalgalite, CUBRID, DataObjects, DB2, DBI, Firebird, IBM_DB, Informix, JDBC, MySQL, Mysql2, ODBC, OpenBase, Oracle, PostgreSQL, SQLite3, Swift, TinyTDS
 
-== Resources
+== リソース
 
 * {Website}[http://sequel.rubyforge.org]
 * {Blog}[http://sequel.heroku.com]
@@ -25,24 +16,24 @@ toolkit for Ruby.
 * {Google group}[http://groups.google.com/group/sequel-talk]
 * {RDoc}[http://sequel.rubyforge.org/rdoc]
 
-To check out the source code:
+ソースコードをチェックアウトするには:
   
   git clone git://github.com/jeremyevans/sequel.git
   
-=== Contact
+=== コンタクト
 
-If you have any comments or suggestions please post to the Google group.
+コメントや提案があれば、Google グループに投稿してください。
 
-== Installation
+== インストール
 
   sudo gem install sequel
   
-== A Short Example
+== 短い例
 
   require 'rubygems'
   require 'sequel'
   
-  DB = Sequel.sqlite # memory database
+  DB = Sequel.sqlite # メモリーデータベース
   
   DB.create_table :items do
     primary_key :id
@@ -50,214 +41,213 @@ If you have any comments or suggestions please post to the Google group.
     Float :price
   end
   
-  items = DB[:items] # Create a dataset
+  items = DB[:items] # データセットの作成
   
   # Populate the table
   items.insert(:name => 'abc', :price => rand * 100)
   items.insert(:name => 'def', :price => rand * 100)
   items.insert(:name => 'ghi', :price => rand * 100)
   
-  # Print out the number of records
+  # レコード数の出力
   puts "Item count: #{items.count}"
   
-  # Print out the average price
+  # 平均価格の出力
   puts "The average price is: #{items.avg(:price)}"
 
-== The Sequel Console
+== Sequel コンソール
 
-Sequel includes an IRB console for quick access to databases (usually referred to as <tt>bin/sequel</tt>). You can use it like this:
+Sequel はデータベースに素早くアクセスするための IRB コンソールを含んでいます(通常は <tt>bin/sequel</tt> として参照できます)。次のようにして使用できます:
 
-  sequel sqlite://test.db # test.db in current directory
+  sequel sqlite://test.db # カレントディレクトリの test.db
 
-You get an IRB session with the database object stored in DB.
+DB に格納されたデータベースオブジェクトでIRB セッションを開始します。
 
-In addition to providing an IRB shell (the default behavior), bin/sequel also has support for migrating databases, dumping schema migrations, and copying databases.  See the {bin/sequel guide}[link:files/doc/bin_sequel_rdoc.html] for more details.
+IRB シェル(デフォルトの振る舞い)に加え、bin/sequel はデータベースのマイグレート、スキーママイグレーションのダンプ、データベースのコピーもサポートします。詳細は {bin/sequel ガイド}[link:files/doc/bin_sequel_rdoc.html] を見てください。
 
-== An Introduction
+== はじめに
 
-Sequel is designed to take the hassle away from connecting to databases and manipulating them. Sequel deals with all the boring stuff like maintaining connections, formatting SQL correctly and fetching records so you can concentrate on your application.
+Sequel はデータベースの接続と操作に手間がかからないようにデザインされています。Sequel は、アプリケーションに集中できるように、接続の維持、SQL を正しく整形、レコードの取り出しのようなすべての退屈なことを処理します。
 
-Sequel uses the concept of datasets to retrieve data. A Dataset object encapsulates an SQL query and supports chainability, letting you fetch data using a convenient Ruby DSL that is both concise and flexible.
+Sequel はデータを取り出すためにデータセットの概念を使用します。データセットオブジェクトは SQL クエリをカプセル化し、連鎖性をサポートし、簡潔で柔軟な便利な Ruby DSL を使用してデータを取り出せるようにします。
 
-For example, the following one-liner returns the average GDP for countries in the middle east region:
+例えば、次のワンライナーは中東の国の GDP 平均を返します:
 
   DB[:countries].filter(:region => 'Middle East').avg(:GDP)
   
-Which is equivalent to:
+これは次と同等です:
 
   SELECT avg(GDP) FROM countries WHERE region = 'Middle East'
 
-Since datasets retrieve records only when needed, they can be stored and later reused. Records are fetched as hashes (or custom model objects), and are accessed using an +Enumerable+ interface:
+データセットは必要な時だけレコードを取り出し、それは保存されて後で再利用されます。レコードはハッシュ(またはカスタムモデルオブジェクト)として取り出され、+Enumerable+ インタフェースを使用してアクセスできます:
 
   middle_east = DB[:countries].filter(:region => 'Middle East')
   middle_east.order(:name).each{|r| puts r[:name]}
   
-Sequel also offers convenience methods for extracting data from Datasets, such as an extended +map+ method:
+Sequel は +map+ メソッドのような、データセットからデータを引き出すための便利なメソッドも提供します:
 
   middle_east.map(:name) #=> ['Egypt', 'Turkey', 'Israel', ...]
   
-Or getting results as a hash via +to_hash+, with one column as key and another as value:
+また、 +to_hash+ でハッシュとして結果を得ることができます。一つのカラムはキー、他は値として:
 
   middle_east.to_hash(:name, :area) #=> {'Israel' => 20000, 'Turkey' => 120000, ...}
 
-== Getting Started
+== 開始
 
-=== Connecting to a database
+=== データベースへの接続
 
-To connect to a database you simply provide <tt>Sequel.connect</tt> with a URL:
+データベースに接続するには、単純に <tt>Sequel.connect</tt> に URL を与えます:
 
   require 'sequel'
   DB = Sequel.connect('sqlite://blog.db')
   
-The connection URL can also include such stuff as the user name, password, and port:
+接続 URL はユーザー名、パスワード、ポートのようなものも含みます:
 
   DB = Sequel.connect('postgres://user:password@host:port/database_name')
 
-You can also specify optional parameters, such as the connection pool size, or loggers for logging SQL queries:
+コネクションプールの大きさや SQL クエリを記録するためのロガーのような、オプションのパラメータを記述することもできます:
 
   DB = Sequel.connect("postgres://user:password@host:port/database_name",
     :max_connections => 10, :logger => Logger.new('log/db.log'))
 
-You can specify a block to connect, which will disconnect from the database after it completes:
+接続にブロックを記述できます。ブロックが終了するとデータベースから切断されます:
 
   Sequel.connect('postgres://user:password@host:port/database_name'){|db| db[:posts].delete}
 
-=== Arbitrary SQL queries
+=== 自由な SQL クエリ
 
-You can execute arbitrary SQL code using <tt>Database#run</tt>:
+<tt>Database#run</tt> を使用して自由に SQL コードを実行できます:
 
   DB.run("create table t (a text, b text)")
   DB.run("insert into t values ('a', 'b')")
 
-You can also create datasets based on raw SQL:
+生 SQL を元にデータセットを生成することもできます:
 
   dataset = DB['select id from items']
-  dataset.count # will return the number of records in the result set
-  dataset.map(:id) # will return an array containing all values of the id column in the result set
+  dataset.count # 結果セットのレコード数を返します
+  dataset.map(:id) # 結果セット中の全 id カラムの値から成る配列を返します
 
-You can also fetch records with raw SQL through the dataset:
+データセットを通して生 SQL でレコードを取り出すこともできます:
 
   DB['select * from items'].each do |row|
     p row
   end
 
-You can use placeholders in your SQL string as well:
+さらに SQL 文字列中でプレースホルダを使用できます:
 
   name = 'Jim'
   DB['select * from items where name = ?', name].each do |row|
     p row
   end
 
-=== Getting Dataset Instances
+=== データセットインスタンスの獲得
 
-Datasets are the primary way records are retrieved and manipulated.  They are generally created via the <tt>Database#from</tt> or <tt>Database#[]</tt> methods:
+データセットはレコードを取り出して操作する主要な方法です。これは通常は <tt>Database#from</tt> または <tt>Database#[]</tt> メソッド経由で生成されます:
 
   posts = DB.from(:posts)
   posts = DB[:posts] # same
 
-Datasets will only fetch records when you tell them to. They can be manipulated to filter records, change ordering, join tables, etc..
+データセットはあなたが伝えた時だけレコードを取り出します。レコードのフィルタ、順序の変更、テーブルの結合等の操作が可能です。
 
-=== Retrieving Records
+=== レコードの取り出し
 
-You can retrieve all records by using the +all+ method:
++all+ メソッドを使用して全レコードを取り出すことができます:
 
   posts.all
   # SELECT * FROM posts
 
-The all method returns an array of hashes, where each hash corresponds to a record.
+all メソッドはハッシュの配列を返します。各ハッシュはレコードに対応しています。
 
-You can also iterate through records one at a time using +each+:
++each+ を使用して1レコードずつ繰り返すこともできます:
 
   posts.each{|row| p row}
 
-Or perform more advanced stuff:
+さらに高度な方法を行えます:
 
   names_and_dates = posts.map([:name, :date])
   old_posts, recent_posts = posts.partition{|r| r[:date] < Date.today - 7}
   
-You can also retrieve the first record in a dataset:
+データセットの最初のレコードを取り出すこともできます:
 
   posts.first
   # SELECT * FROM posts LIMIT 1
   
-Or retrieve a single record with a specific value:
+特定の値を持つ1レコードを取り出すこともできます:
 
   posts[:id => 1]
   # SELECT * FROM posts WHERE id = 1 LIMIT 1
   
-If the dataset is ordered, you can also ask for the last record:
+データセットに順序がある場合、最後のレコードを問い合わせることができます:
 
   posts.order(:stamp).last
   # SELECT * FROM posts ORDER BY stamp DESC LIMIT 1
   
-=== Filtering Records
+=== レコードのフィルタ
 
-An easy way to filter records is to provide a hash of values to match to +where+:
+レコードをフィルタする簡単な方法は、適合する値のハッシュを +where+ に与えることです:
 
   my_posts = posts.where(:category => 'ruby', :author => 'david')
   # WHERE category = 'ruby' AND author = 'david'
   
-You can also specify ranges:
+範囲も指定できます:
 
   my_posts = posts.where(:stamp => (Date.today - 14)..(Date.today - 7))
   # WHERE stamp >= '2010-06-30' AND stamp <= '2010-07-07'
   
-Or arrays of values:
+値の配列も指定できます:
 
   my_posts = posts.where(:category => ['ruby', 'postgres', 'linux'])
   # WHERE category IN ('ruby', 'postgres', 'linux')
   
-Sequel also accepts expressions:
+Sequel は式も受け付けます:
   
   my_posts = posts.where{stamp > Date.today << 1}
   # WHERE stamp > '2010-06-14'
   
-Some adapters will also let you specify Regexps:
+アダプタによっては正規表現も指定することができます:
 
   my_posts = posts.where(:category => /ruby/i)
   # WHERE category ~* 'ruby'
   
-You can also use an inverse filter via +exclude+:
++exclude+ でフィルタを反転できます:
 
   my_posts = posts.exclude(:category => ['ruby', 'postgres', 'linux'])
   # WHERE category NOT IN ('ruby', 'postgres', 'linux')
 
-You can also specify a custom WHERE clause using a string:
+文字列でカスタム WHERE 節も指定できます:
 
   posts.where('stamp IS NOT NULL')
   # WHERE stamp IS NOT NULL
 
-You can use parameters in your string, as well:
+文字列でパラメータを使用できます:
 
   author_name = 'JKR'
   posts.where('(stamp < ?) AND (author != ?)', Date.today - 3, author_name)
   # WHERE (stamp < '2010-07-11') AND (author != 'JKR')
 
-Datasets can also be used as subqueries:
+データセットはサブクエリとして使用することもできます:
 
   DB[:items].where('price > ?', DB[:items].select{avg(price) + 100})
   # WHERE price > (SELECT avg(price) + 100 FROM items)
 
-After filtering, you can retrieve the matching records by using any of the retrieval methods:
+フィルタ後、任意の取り出しメソッドを使用して適合したレコードを取り出すことができます:
 
   my_posts.each{|row| p row}
   
-See the {Dataset Filtering}[link:files/doc/dataset_filtering_rdoc.html] file for more details.
+詳細は {Dataset Filtering}[link:files/doc/dataset_filtering_rdoc.html] を見てください。
 
-=== Security
+=== セキュリティ
 
-Designing apps with security in mind is a best practice.
-Please read the {Security Guide}[link:files/doc/security_rdoc.html] for details on security
-issues that you should be aware of when using Sequel.
+セキュリティを念頭においてアプリケーションを設計することはベストプラクティスです。
+Sequel 使用時に注意すべきセキュリティ事項の詳細については {Security Guide}[link:files/doc/security_rdoc.html] を読んでください。
 
-=== Summarizing Records
+=== レコードの集約
 
-Counting records is easy using +count+:
++count+ を使用して簡単にレコードを数えることができます:
 
   posts.where(:category.like('%ruby%')).count
   # SELECT COUNT(*) FROM posts WHERE category LIKE '%ruby%'
 
-And you can also query maximum/minimum values via +max+ and +min+:
+最大/最小値は +max+ と +min+ で問い合わせできます:
 
   max = DB[:history].max(:value)
   # SELECT max(value) FROM history
@@ -265,129 +255,126 @@ And you can also query maximum/minimum values via +max+ and +min+:
   min = DB[:history].min(:value)
   # SELECT min(value) FROM history
   
-Or calculate a sum or average via +sum+ and +avg+:
+合計や平均も +sum+ と +avg+ で計算できます:
 
   sum = DB[:items].sum(:price)
   # SELECT sum(price) FROM items
   avg = DB[:items].avg(:price)
   # SELECT avg(price) FROM items
   
-=== Ordering Records
+=== レコードの並び替え
 
-Ordering datasets is simple using +order+:
+データセットを並び替えるには単純に +order+ を使用します:
 
   posts.order(:stamp)
   # ORDER BY stamp
   posts.order(:stamp, :name)
   # ORDER BY stamp, name
 
-Chaining +order+ doesn't work the same as +where+:
++order+ の連結は +where+ と同じようには働きません:
 
   posts.order(:stamp).order(:name)
   # ORDER BY name
 
-The +order_append+ method chains this way, though:
++order_append+ メソッドを連結してこれを行えます:
 
   posts.order(:stamp).order_append(:name)
   # ORDER BY stamp, name
   
-The +order_prepend+ method can be used as well:
++order_prepend+ メソッドも使用できます:
 
   posts.order(:stamp).order_prepend(:name)
   # ORDER BY name, stamp
   
-You can also specify descending order:
+降順を指定することもできます:
 
   posts.reverse_order(:stamp)
   # ORDER BY stamp DESC
   posts.order(Sequel.desc(:stamp))
   # ORDER BY stamp DESC
 
-=== Core Extensions
+=== コア拡張
 
-Note the use of <tt>Sequel.desc(:stamp)</tt> in the above example.  Much of Sequel's DSL uses this style, calling methods on the Sequel module that return SQL expression objects.  Sequel also ships with a {core_extensions extension}[link:files/doc/core_extensions_rdoc.html]) that integrates Sequel's DSL better into the ruby language, allowing you to write:
+上の例の <tt>Sequel.desc(:stamp)</tt> の使用に着目してください。Sequel の DSL の多くはこのスタイル(SQL 式オブジェクトを返す Sequel モジュールのメソッド呼び出し)を使用します。Sequel は {core_extensions extension}[link:files/doc/core_extensions_rdoc.html]) も提供します。これは Sequel の DSL をよりよく Ruby 言語に統合します。次のように書けます:
 
   :stamp.desc
 
-instead of:
+次の代わりに:
 
   Sequel.desc(:stamp)
 
-=== Selecting Columns
+=== カラムの選択
 
-Selecting specific columns to be returned is also simple using +select+:
++select+ を使用して簡単に返すカラムを選択できます:
 
   posts.select(:stamp)
   # SELECT stamp FROM posts
   posts.select(:stamp, :name)
   # SELECT stamp, name FROM posts
 
-Chaining +select+ works like +order+, not +where+:
++select+ の連結は +where+ ではなく +order+ のように働きます:
 
   posts.select(:stamp).select(:name)
   # SELECT name FROM posts
 
-As you might expect, there is an +order_append+ equivalent for +select+ called +select_append+:
+あなたの予想通り、+order_append+ と同様の +select+ は +select_append+ です:
 
   posts.select(:stamp).select_append(:name)
   # SELECT stamp, name FROM posts
   
-=== Deleting Records
+=== レコードの削除
 
-Deleting records from the table is done with +delete+:
+テーブルからのレコードの削除は +delete+ で行います:
 
   posts.where('stamp < ?', Date.today - 3).delete
   # DELETE FROM posts WHERE stamp < '2010-07-11'
   
-Be very careful when deleting, as +delete+ affects all rows in the dataset.
-Call +where+ first and +delete+ second:
+削除はとても注意してください。+delete+ はデータセット内の全ての行に影響します。
+まず +where+ それから +delete+ を呼んでください:
 
   # DO THIS:
   posts.where('stamp < ?', Date.today - 7).delete
   # NOT THIS:
   posts.delete.where('stamp < ?', Date.today - 7)
 
-=== Inserting Records
+=== レコードの挿入
 
-Inserting records into the table is done with +insert+:
+テーブルへのレコードの挿入は +insert+ で行います:
 
   posts.insert(:category => 'ruby', :author => 'david')
   # INSERT INTO posts (category, author) VALUES ('ruby', 'david')
   
-=== Updating Records
+=== レコードの更新
 
-Updating records in the table is done with +update+:
+テーブル内のレコードの更新は +update+ で行います:
 
   posts.where('stamp < ?', Date.today - 7).update(:state => 'archived')
   # UPDATE posts SET state = 'archived' WHERE stamp < '2010-07-07'
 
-You can reference table columns when choosing what values to set:
+設定する値の選択にテーブルのカラムを参照できます:
 
   posts.where{|o| o.stamp < Date.today - 7}.update(:backup_number => :backup_number + 1)
   # UPDATE posts SET backup_number = backup_number + 1 WHERE stamp < '2010-07-07'
 
-As with +delete+, +update+ affects all rows in the dataset, so +where+ first,
-+update+ second:
++delete+ と同様に +update+ はデータセットの全ての行に影響するため、まず +where+ そして +update+ を行なってください:
 
   # DO THIS:
   posts.where('stamp < ?', Date.today - 7).update(:state => 'archived')
   # NOT THIS:
   posts.update(:state => 'archived').where('stamp < ?', Date.today - 7)
 
-=== Transactions
+=== トランザクション
 
-You can wrap some code in a database transaction using the <tt>Database#transaction</tt> method:
+<tt>Database#transaction</tt> メソッドを使用してデータベーストランザクションでコードをラップすることができます:
 
   DB.transaction do
     posts.insert(:category => 'ruby', :author => 'david')
     posts.where('stamp < ?', Date.today - 7).update(:state => 'archived')
   end
 
-If the block does not raise an exception, the transaction will be committed.
-If the block does raise an exception, the transaction will be rolled back,
-and the exception will be reraised.  If you want to rollback the transaction
-and not raise an exception outside the block, you can raise the
-<tt>Sequel::Rollback</tt> exception inside the block:
+ブロックが例外を上げなければトランザクションはコミットされます。
+ブロックが例外を上げた場合はトランザクションはロールバックされ、例外は再送出されます。
+トランザクションをロールバックしたいけどブロックの外に例外を上げたくない場合は、ブロック内で <tt>Sequel::Rollback</tt> 例外を上げればよいです:
 
   DB.transaction do
     posts.insert(:category => 'ruby', :author => 'david')
@@ -396,9 +383,9 @@ and not raise an exception outside the block, you can raise the
     end
   end
 
-=== Joining Tables
+=== テーブル結合
 
-Sequel makes it easy to join tables:
+Sequel はテーブルを簡単に結合できます:
 
   order_items = DB[:items].join(:order_items, :item_id => :id).
     where(:order_id => 1234)
@@ -406,118 +393,115 @@ Sequel makes it easy to join tables:
   # ON order_items.item_id = items.id 
   # WHERE order_id = 1234
 
-The important thing to note here is that item_id is automatically qualified with
-the table being joined, and id is automatically qualified with the last table
-joined.
+ここで重要なことは、item_id は結合されるテーブルで自動的に修飾され、id は結合される最後のテーブルで自動的に修飾されることです。
 
-You can then do anything you like with the dataset:
+それからデータセットと同様のことができます:
 
   order_total = order_items.sum(:price)
   # SELECT sum(price) FROM items INNER JOIN order_items
   # ON order_items.item_id = items.id
   # WHERE order_items.order_id = 1234
   
-=== Graphing Datasets
+=== データセットグラフ
 
-When retrieving records from joined datasets, you get the results in a single hash, which is subject to clobbering if you have columns with the same name in multiple tables:
+結合されたデータセットからレコードを取り出す時、ひとつのハッシュに結果を得られます。これは複数のテーブルに同じ名前のカラムがある場合は壊れてしまいます:
 
   DB[:items].join(:order_items, :item_id => :id).first
   => {:id=>order_items.id, :item_id=>order_items.item_id}
 
-Using +graph+, you can split the result hashes into subhashes, one per join:
++graph+ を使用すると、結果のハッシュを結合毎にサブハッシュに分割することができます:
 
   DB[:items].graph(:order_items, :item_id => :id).first
   => {:items=>{:id=>items.id}, :order_items=>{:id=>order_items.id, :item_id=>order_items.item_id}}
 
-== Column references in Sequel
+== Sequel でのカラム参照
 
-Sequel expects column names to be specified using symbols. In addition, returned hashes always use symbols as their keys. This allows you to freely mix literal values and column references in many cases. For example, the two following lines produce equivalent SQL:
+Sequel はカラム名がシンボルで記述されることを期待します。さらに、戻り値のハッシュのキーは常にシンボルです。これは多くの場合、リテラル値とカラム参照を自由に混ぜられます。たとえば、次の2行は同等の SQL を提供します:
 
   items.where(:x => 1)
   # SELECT * FROM items WHERE (x = 1)
   items.where(1 => :x)
   # SELECT * FROM items WHERE (1 = x)"
 
-Ruby strings are generally treated as SQL strings:
+Ruby 文字列は通常 SQL 文字列として扱われます:
 
   items.where(:x => 'x')
   # SELECT * FROM items WHERE (x = 'x')
 
-=== Qualifying identifiers (column/table names)
+=== 識別子(カラム/テーブル名)の修飾
 
-An identifier in SQL is a name that represents a column, table, or schema.
-Identifiers can be qualified by using the double underscore special notation <tt>:table__column</tt>:
+SQL の識別子はカラム、テーブル、スキーマの名前です。
+識別子は二重のアンダースコアを使用した特殊な表記法 <tt>:table__column</tt> で修飾できます:
 
   items.literal(:items__price)
   # items.price
 
-Another way to qualify columns is to use the <tt>Sequel.qualify</tt> method:
+カラムを修飾する他の方法は、<tt>Sequel.qualify</tt> メソッドを使用することです:
 
   items.literal(Sequel.qualify(:items, :price))
   # items.price
 
-While it is more common to qualify column identifiers with table identifiers, you can also qualify table identifiers with schema identifiers
-to select from a qualified table:
+テーブル識別子でカラム識別子を修飾するのをさらに一般的にして、修飾されたテーブルから SELECT するために、スキーマ識別子でテーブル識別子を修飾できます:
 
   posts = DB[:some_schema__posts]
   # SELECT * FROM some_schema.posts
 
-=== Identifier aliases
+=== 識別子エイリアス
 
-You can also alias identifiers by using the triple undersecore special notation <tt>:column___alias</tt> or <tt>:table__column___alias</tt>:
+三重アンダースコアを使用した特殊な表記法 <tt>:column___alias</tt> または <tt>:table__column___alias</tt> で識別子をエイリアスできます:
 
   items.literal(:price___p)
   # price AS p
   items.literal(:items__price___p)
   # items.price AS p
 
-Another way to alias columns is to use the <tt>Sequel.as</tt> method:
+カラムをエイリアスする別の方法は、<tt>Sequel.as</tt> メソッドを使用することです:
 
   items.literal(Sequel.as(:price, :p))
   # price AS p
 
-You can use the <tt>Sequel.as</tt> method to alias arbitrary expressions, not just identifiers:
+<tt>Sequel.as</tt> メソッドを使用すると、識別子と異なり、任意の式をエイリアスできます:
 
   items.literal(Sequel.as(DB[:posts].select{max(id)}, :p))
   # (SELECT max(id) FROM posts) AS p
 
-== Sequel Models
+== Sequel モデル
 
-A model class wraps a dataset, and an instance of that class wraps a single record in the dataset.
+モデルクラスはデータセットをラップし、クラスのインスタンスはデータセットの1レコードをラップします。
 
-Model classes are defined as regular Ruby classes inheriting from <tt>Sequel::Model</tt>:
+モデルクラスは <tt>Sequel::Model</tt> を継承した通常の Ruby クラスとして定義されています:
 
   DB = Sequel.connect('sqlite://blog.db')
   class Post < Sequel::Model
   end
 
-Sequel model classes assume that the table name is an underscored plural of the class name:
+Sequel モデルクラスは、クラス名をアンダースコアした複数形がテーブル名であるとみなします:
 
   Post.table_name #=> :posts
 
-You can explicitly set the table name or even the dataset used:
+テーブル名を明示的に設定できます(使用しているデータセットでも):
 
   class Post < Sequel::Model(:my_posts)
   end
   # or:
   Post.set_dataset :my_posts
 
-If you call +set_dataset+ with a symbol, it assumes you are referring to the table with the same name.  You can also call it with a dataset, which will set the defaults for all retrievals for that model:
+シンボルを引数として +set_dataset+ を呼び出すと、同じ名前のテーブルを参照しているとみなします。データセットを引数として呼び出すと、そのモデルに対するすべての検索のデフォルトとして設定できます:
 
   Post.set_dataset DB[:my_posts].where(:category => 'ruby')
   Post.set_dataset DB[:my_posts].select(:id, :name).order(:date)
 
-=== Model instances
+=== モデルインスタンス
 
-Model instances are identified by a primary key.  In most cases, Sequel can query the database to determine the primary key, but if not, it defaults to using <tt>:id</tt>. The <tt>Model.[]</tt> method can be used to fetch records by their primary key:
+モデルインスタンスはプライマリキーによって識別されます。多くの場合、Sequel はプライマリキーを決定するためにデータベースに問い合わせしますが、できない場合は <tt>:id</tt> をデフォルトとして使用します。<tt>Model.[]</tt> メソッドでプライマリキーを指定してレコードを取り出すことができます:
 
   post = Post[123]
 
-The +pk+ method is used to retrieve the record's primary key value:
++pk+ メソッドでレコードのプライマリキー値を取り出すことができます:
 
   post.pk #=> 123
 
-Sequel models allow you to use any column as a primary key, and even composite keys made from multiple columns:
+Sequel モデルはプライマリキーとして任意のカラムを使用できます。複数カラムから複合キーも作成できます:
 
   class Post < Sequel::Model
     set_primary_key [:category, :title]
@@ -526,43 +510,43 @@ Sequel models allow you to use any column as a primary key, and even composite k
   post = Post['ruby', 'hello world']
   post.pk #=> ['ruby', 'hello world']
 
-You can also define a model class that does not have a primary key via +no_primary_key+, but then you lose the ability to easily update and delete records:
++no_primary_key+ でプライマリキーを持たないモデルクラスも定義できます。しかし、簡単にレコードを更新したり削除する機能は失われます:
 
   Post.no_primary_key
 
-A single model instance can also be fetched by specifying a condition:
+モデルインスタンスは条件を指定して取り出すこともできます:
 
   post = Post[:title => 'hello world']
   post = Post.first{num_comments < 10}
 
-=== Iterating over records
+=== レコードの繰り返し
 
-A model class lets you iterate over subsets of records by proxying many methods to the underlying dataset. This means that you can use most of the +Dataset+ API to create customized queries that return model instances, e.g.:
+モデルクラスは、多くのメソッドを下にあるデータセットにプロキシすることで、レコードのサブセットを繰り返すことができます。これは、モデルインスタンスを返すカスタマイズされたクエリを生成するために +Dataset+ API の多くを使用できることを意味します。例えば:
 
   Post.where(:category => 'ruby').each{|post| p post}
 
-You can also manipulate the records in the dataset:
+データセット内のレコードの操作もできます:
 
   Post.where{num_comments < 7}.delete
   Post.where(Sequel.like(:title, /ruby/)).update(:category => 'ruby')
 
-=== Accessing record values
+=== レコード値へのアクセス
 
-A model instance stores its values as a hash with column symbol keys, which you can access directly via the +values+ method:
+モデルインスタンスはその値をカラムシンボルキーのハッシュとして格納します。ハッシュには +values+ メソッドで直接アクセスできます:
 
   post.values #=> {:id => 123, :category => 'ruby', :title => 'hello world'}
 
-You can read the record values as object attributes, assuming the attribute names are valid columns in the model's dataset:
+レコード値はオブジェクトの属性として読み込むことができます。属性名は、モデルのデータセット内の正当なカラム名とみなされます:
 
   post.id #=> 123
   post.title #=> 'hello world'
   
-If the record's attributes names are not valid columns in the model's dataset (maybe because you used +select_append+ to add a computed value column), you can use <tt>Model#[]</tt> to access the values:
+レコードの属性名がモデルのデータセット内の正当なカラムでない場合(計算された値のカラムを +select_append+ で追加した場合等)、<tt>Model#[]</tt> で値にアクセスできます:
 
   post[:id] #=> 123
   post[:title] #=> 'hello world'
 
-You can also modify record values using attribute setters, the <tt>[]=</tt> method, or the +set+ method:
+属性セッター(<tt>[]=</tt> メソッドまたは +set+ メソッド)を使用してレコードの値を変更することもできます:
 
   post.title = 'hey there'
   # or 
@@ -570,27 +554,27 @@ You can also modify record values using attribute setters, the <tt>[]=</tt> meth
   # or 
   post.set(:title=>'hey there')
 
-That will just change the value for the object, it will not update the row in the database.  To update the database row, call the +save+ method:
+それはオブジェクトの値を変更するだけで、データベース内の行の更新は行いません。データベース行を更新するには、+save+ メソッドを呼び出します:
 
   post.save
 
-You can modify record values and save the changes to the object in a single method call using the +update+ method:
++update+ メソッドで、レコードの値の変更とオブジェクトの変更の保存を一つのメソッドで行うことができます:
 
   post.update(:title => 'hey there')
 
-=== Creating new records
+=== 新しいレコードの生成
 
-New records can be created by calling <tt>Model.create</tt>:
+新しいレコードは <tt>Model.create</tt> を呼び出すことで生成できます:
 
   post = Post.create(:title => 'hello world')
 
-Another way is to construct a new instance and save it later:
+他の方法は、新しいインスタンスを構成してあとで保存することです:
 
   post = Post.new
   post.title = 'hello world'
   post.save
 
-You can also supply a block to <tt>Model.new</tt> and <tt>Model.create</tt>:
+<tt>Model.new</tt> と <tt>Model.create</tt> にブロックを与えることもできます:
 
   post = Post.new do |p|
     p.title = 'hello world'
@@ -598,9 +582,9 @@ You can also supply a block to <tt>Model.new</tt> and <tt>Model.create</tt>:
 
   post = Post.create{|p| p.title = 'hello world'}
 
-=== Hooks
+=== フック
 
-You can execute custom code when creating, updating, or deleting records by defining hook methods. The +before_create+ and +after_create+ hook methods wrap record creation. The +before_update+ and +after_update+ hook methods wrap record updating. The +before_save+ and +after_save+ hook methods wrap record creation and updating. The +before_destroy+ and +after_destroy+ hook methods wrap destruction. The +before_validation+ and +after_validation+ hook methods wrap validation. Example:
+レコードの生成、更新、削除時にフックメソッドでカスタムコードを実行することができます。+before_create+ と +after_create+ フックメソッドはレコード生成をラップします。+before_update+ と +after_update+ フックメソッドはレコード更新をラップします。+before_save+ と +after_save+ フックメソッドはレコードの生成と更新をラップします。+before_destroy+ と +after_destroy+ フックメソッドは破壊をラップします。+before_validation+ と +after_validation+ フックメソッドはバリデーションをラップします。例:
 
   class Post < Sequel::Model
     def after_create
@@ -614,29 +598,28 @@ You can execute custom code when creating, updating, or deleting records by defi
     end
   end
 
-Note the use of +super+ if you define your own hook methods.  Almost all <tt>Sequel::Model</tt> class and instance methods (not just hook methods) can be overridden safely, but you have to make sure to call +super+ when doing so, otherwise you risk breaking things.
+自前のフックメソッドを定義する場合は、+super+ の使用に注意してください。ほとんど全ての <tt>Sequel::Model</tt> クラスメソッドとインスタンスメソッド(フックメソッド以外)は、安全に上書きできますが、それを行う際に +super+ を確実に呼び出す必要があります。そうしないと、何かを壊すリスクがあります。
 
-For the example above, you should probably use a database trigger if you can.  Hooks can be used for data integrity, but they will only enforce that integrity when you are modifying the database through model instances, and even then they are often subject to race conditions.  It's best to use database triggers and constraints to enforce data integrity.
+上の例では、可能であればデータベースのトリガーを使用すべきです。フックはデータの完全性のために使用できますが、
+モデルインスタンスを通じてデータベースを変更する時にその完全性を強制するだけです。それらはしばしば競合状態の影響を受けます。データベースのトリガーと制約を使って、データの完全性を強制するのがベストです。
 
-=== Deleting records
+=== レコードの削除
 
-You can delete individual records by calling +delete+ or +destroy+. The only difference between the two methods is that +destroy+ invokes +before_destroy+ and +after_destroy+ hook methods, while +delete+ does not:
++delete+ または +destroy+ を呼び出して個々のレコードを削除できます。この2つのメソッドの違いは、+destroy+ が +before_destroy+ と +after_destroy+ フックメソッドを呼び出すことだけです。+delete+ は行いません:
 
   post.delete # => bypasses hooks
   post.destroy # => runs hooks
 
-Records can also be deleted en-masse by calling <tt>Model.delete</tt> and <tt>Model.destroy</tt>. As stated above, you can specify filters for the deleted records:
+レコードは <tt>Model.delete</tt> と <tt>Model.destroy</tt> を呼び出すことで大量に削除することもできます。上述したように削除されるレコード用にフィルタを記述することもできます:
 
   Post.where(:category => 32).delete # => bypasses hooks
   Post.where(:category => 32).destroy # => runs hooks
 
-Please note that if <tt>Model.destroy</tt> is called, each record is deleted 
-separately, but <tt>Model.delete</tt> deletes all matching records with a single 
-SQL query.
+<tt>Model.destroy</tt> が呼び出された場合は各レコードが別々に削除されることに注意してください。<tt>Model.delete</tt> はすべての適合したレコードを一つの SQL クエリで削除します。
 
-=== Associations
+=== 関連(Associations)
 
-Associations are used in order to specify relationships between model classes that reflect relationships between tables in the database, which are usually specified using foreign keys.  You specify model associations via the +many_to_one+, +one_to_one+, +one_to_many+, and +many_to_many+ class methods:
+関連はモデルクラス間の関係を指定するために使用されます。これはデータベース内のテーブル間の関係を反映します。通常は外部キーを使用して指定されます。+many_to_one+, +one_to_one+, +one_to_many+, +many_to_many+ クラスメソッドでモデルの関連を指定します:
 
   class Post < Sequel::Model
     many_to_one :author
@@ -644,13 +627,13 @@ Associations are used in order to specify relationships between model classes th
     many_to_many :tags
   end
 
-+many_to_one+ and +one_to_one+ create a getter and setter for each model object:
++many_to_one+ と +one_to_one+ はモデルオブジェクトにゲッターとセッターを生成します:
 
   post = Post.create(:name => 'hi!')
   post.author = Author[:name => 'Sharon']
   post.author
 
-+one_to_many+ and +many_to_many+ create a getter method, a method for adding an object to the association, a method for removing an object from the association, and a method for removing all associated objects from the association:
++one_to_many+ と +many_to_many+ はゲッターメソッドと、関連にオブジェクトを追加するメソッドと、関連からオブジェクトを削除するメソッドと、関連からすべての関連オブジェクトを削除するメソッドを生成します:
 
   post = Post.create(:name => 'hi!')
   post.comments
@@ -665,19 +648,19 @@ Associations are used in order to specify relationships between model classes th
   post.remove_tag(tag)
   post.remove_all_tags
   
-Note that the remove_* and remove_all_* methods do not delete the object from the database, they merely disassociate the associated object from the receiver.
+remove_* と remove_all_* メソッドはデータベースからオブジェクトを削除しないことに注意してください。これらはレシーバーから関連オブジェクトの関連を外すだけです。
 
-All associations add a dataset method that can be used to further filter or reorder the returned objects, or modify all of them:
+すべての関連は dataset メソッドを追加します。これらは返されるオブジェクトのフィルタまたは並び替え、またはそれらすべてを変更するのに使用されます:
 
-  # Delete all of this post's comments from the database
+  # この post のすべてのコメントをデータベースから削除します
   post.comments_dataset.destroy
 
-  # Return all tags related to this post with no subscribers, ordered by the tag's name
+  # この post に関連したすべてのタグで subscribers がないものを、タグの名前の順に返します
   post.tags_dataset.where(:subscribers=>0).order(:name).all
 
 === Eager Loading
 
-Associations can be eagerly loaded via +eager+ and the <tt>:eager</tt> association option. Eager loading is used when loading a group of objects. It loads all associated objects for all of the current objects in one query, instead of using a separate query to get the associated objects for each current object. Eager loading requires that you retrieve all model objects at once via +all+ (instead of individually by +each+). Eager loading can be cascaded, loading association's associated objects.
+関連は +eager+ と <tt>:eager</tt> 関連オプションで eagerly にロードされます。Eager ローディングはオブジェクトのグループをロードする時に使用されます。これはすべてのカレントオブジェクトのすべての関連オブジェクトを1クエリでロードします。各カレントオブジェクトの関連オブジェクトを得るために別々のクエリを使用するのではありません。Eager ローディングは +all+ ですべてのモデルオブジェクトを一度に取り出します(+each+ で個々にするのではなく)。Eager ローディングはカスケードして関連の関連オブジェクトをロードできます。
 
   class Person < Sequel::Model
     one_to_many :posts, :eager=>[:tags]
@@ -700,51 +683,51 @@ Associations can be eagerly loaded via +eager+ and the <tt>:eager</tt> associati
     many_to_many :tags
   end
 
-  # Eager loading via .eager
+  # .eager で Eager ローディングします
   Post.eager(:person).all
 
-  # eager is a dataset method, so it works with filters/orders/limits/etc.
+  # eager はデータセットメソッドなので、フィルタ/並び替え/件数制限等でも働きます
   Post.where{topic > 'M'}.order(:date).limit(5).eager(:person).all
   
   person = Person.first
-  # Eager loading via :eager (will eagerly load the tags for this person's posts)
+  # :eager で Eager ローディングします(この person の post から tag を eagerly ロードします)
   person.posts
   
-  # These are equivalent
+  # この2つは同等です
   Post.eager(:person, :tags).all
   Post.eager(:person).eager(:tags).all
   
-  # Cascading via .eager
+  # .eager でカスケードしています
   Tag.eager(:posts=>:replies).all
   
-  # Will also grab all associated posts' tags (because of :eager)
+  # すべての関連 post のタグを全取得します (:eager があるので)
   Reply.eager(:person=>:posts).all
   
-  # No depth limit (other than memory/stack), and will also grab posts' tags
-  # Loads all people, their posts, their posts' tags, replies to those posts,
-  # the person for each reply, the tag for each reply, and all posts and
-  # replies that have that tag.  Uses a total of 8 queries.
+  # 深さの制限なしで(メモリ/スタック以外には) post の tag を全取得します。
+  # すべての people、それらの post、それらの post の tag、それらの post への reply、
+  # 各 reply の person、各 reply の tag、それらの tag を持つすべての post と reply をロードします。
+  # 合計 8 クエリを使用します。
   Person.eager(:posts=>{:replies=>[:person, {:tags=>[:posts, :replies]}]}).all
 
-In addition to using +eager+, you can also use +eager_graph+, which will use a single query to get the object and all associated objects.  This may be necessary if you want to filter or order the result set based on columns in associated tables.  It works with cascading as well, the API is very similar.  Note that using +eager_graph+ to eagerly load multiple <tt>*_to_many</tt> associations will cause the result set to be a cartesian product, so you should be very careful with your filters when using it in that case.
++eager+ に加え +eager_graph+ も使用できます。これはオブジェクトとすべての関連オブジェクトを得るために1クエリを使用します。これは関連テーブルのカラムを元にフィルタまたは並び替えをしたい場合に必要となります。これはカスケーディングでも働き、API はとても似ています。複数の <tt>*_to_many</tt> 関連を eagerly ロードするために +eager_graph+ を使用すると、結果セットが cartesian product になることに注意してください。そのためこのケースでそれを使用する時はフィルタに充分注意するべきです。
 
-You can dynamically customize the eagerly loaded dataset by using using a proc.  This proc is passed the dataset used for eager loading, and should return a modified copy of that dataset:
+proc を使用して eagerly ロードされたデータセットを動的にカスタマイズすることもできます。この proc は eager ローディングのために使用されるデータセットに渡され、データセットの変更された複製を返すべきです:
 
   # Eagerly load only replies containing 'foo'
   Post.eager(:replies=>proc{|ds| ds.where(Sequel.like(text, '%foo%'))}).all
 
-This also works when using +eager_graph+, in which case the proc is called with dataset to graph into the current dataset:
+これは +eager_graph+ 使用時にも働きます。この場合 proc はデータセットを引数として、現在のデータセットに graph するために呼び出されます:
 
   Post.eager_graph(:replies=>proc{|ds| ds.where(Sequel.like(text, '%foo%'))}).all
 
-You can dynamically customize eager loads for both +eager+ and +eager_graph+ while also cascading, by making the value a single entry hash with the proc as a key, and the cascaded associations as the value:
+カスケード中でも +eager+ と +eager_graph+ 用に eager ロードを動的にカスタマイズできます。この場合は、proc をキー、カスケードされた関連を値とした1つのエントリのハッシュを値とします:
 
-  # Eagerly load only replies containing 'foo', and the person and tags for those replies
+  # 'foo' を含んでいる reply と、これらの reply の person と tag だけを Eagerly ロードします
   Post.eager(:replies=>{proc{|ds| ds.where(Sequel.like(text, '%foo%'))}=>[:person, :tags]}).all
 
-=== Extending the underlying dataset
+=== データセットの下の拡張
 
-The obvious way to add table-wide logic is to define class methods to the model class definition. That way you can define subsets of the underlying dataset, change the ordering, or perform actions on multiple records:
+テーブル共通のロジックを追加する明らかな方法は、モデルクラス定義にクラスメソッドを定義することです。この方法はデータセット下のサブセットの定義、並び替えの変更、複数レコードのアクションの実行を可能にします:
 
   class Post < Sequel::Model
     def self.posts_with_few_comments
@@ -756,7 +739,7 @@ The obvious way to add table-wide logic is to define class methods to the model 
     end
   end
 
-You can also implement table-wide logic by defining methods on the dataset using +dataset_module+:
++dataset_module+ を使用してデータセット上にメソッドを定義することで、テーブル共通のロジックを実装することもできます:
 
   class Post < Sequel::Model
     dataset_module do
@@ -770,26 +753,22 @@ You can also implement table-wide logic by defining methods on the dataset using
     end
   end
 
-This is the recommended way of implementing table-wide operations, and allows you to have access to your model API from filtered datasets as well:
+これはテーブル共通の操作の実装方法としてお勧めします。フィルタされたデータセットからもあなたのモデル API にアクセスできます:
 
   Post.where(:category => 'ruby').clean_posts_with_few_comments
 
-Sequel models also provide a +subset+ class method that creates a dataset method with a simple filter:
+Sequel モデルは +subset+ クラスメソッドも提供します。これは簡単なフィルタを引数としたデータセットメソッドを生成します:
 
   class Post < Sequel::Model
     subset(:posts_with_few_comments){num_comments < 30}
     subset :invisible, Sequel.~(:visible)
   end
 
-=== Model Validations
+=== モデルのバリデーション
 
-You can define a +validate+ method for your model, which +save+
-will check before attempting to save the model in the database.
-If an attribute of the model isn't valid, you should add a error
-message for that attribute to the model object's +errors+. If an
-object has any errors added by the validate method, +save+ will
-raise an error or return false depending on how it is configured
-(the +raise_on_save_failure+ flag).
+あなたのモデルに +validate+ メソッドを定義することで、データベースにモデルを保存しようとする前に +save+ がチェックします。
+モデルの属性が正当でない場合は、モデルオブジェクトの +errors+ にその属性のエラーメッセージを追加すべきです。
+オブジェクトが validate メソッドによって追加された何かのエラーを持っている場合、+save+ はエラーを発生するか、false を返します。この動きは +raise_on_save_failure+ フラグで設定できます。
 
   class Post < Sequel::Model
     def validate
