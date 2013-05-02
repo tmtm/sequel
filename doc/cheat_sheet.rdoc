@@ -1,6 +1,6 @@
-= Cheat Sheet   
+= チートシート
 
-== Open a database
+== データベースのオープン
 
   require 'rubygems'
   require 'sequel'
@@ -10,20 +10,20 @@
   DB = Sequel.postgres('my_db', :user => 'user', :password => 'password', :host => 'localhost')
   DB = Sequel.ado('mydb')
 
-== Open an SQLite memory database
+== SQLite メモリデータベースのオープン
 
-Without a filename argument, the sqlite adapter will setup a new sqlite database in memory.
+ファイル名引数がないと、sqlite アダプタは新しい sqlite データベースをメモリ内にセットアップします。
 
   DB = Sequel.sqlite
 
-== Logging SQL statements
+== SQL ステートメントのロギング
 
   require 'logger'
   DB = Sequel.sqlite '', :loggers => [Logger.new($stdout)]
-  # or
+  # または
   DB.loggers << Logger.new(...)
 
-== Using raw SQL
+== 生 SQL の使用
 
   DB.run "CREATE TABLE users (name VARCHAR(255) NOT NULL, age INT(3) NOT NULL)"
   dataset = DB["SELECT age FROM users WHERE name = ?", name]
@@ -32,51 +32,51 @@ Without a filename argument, the sqlite adapter will setup a new sqlite database
     p row[:name]
   end
 
-== Create a dataset
+== データセットの作成
 
   dataset = DB[:items]
   dataset = DB.from(:items)
 
-== Most dataset methods are chainable
+== 多くのデータセットメソッドはチェイン可能
 
   dataset = DB[:managers].where(:salary => 5000..10000).order(:name, :department)
 
-== Insert rows
+== 行のインサート
 
   dataset.insert(:name => 'Sharon', :grade => 50)
 
-== Retrieve rows
+== 行の取り出し
 
   dataset.each{|r| p r}
   dataset.all # => [{...}, {...}, ...]
   dataset.first # => {...}
 
-== Update/Delete rows
+== 行の更新/削除
 
   dataset.exclude(:active).delete
   dataset.where('price < ?', 100).update(:active => true)
 
-== Datasets are Enumerable
+== データセットは Enumerable
 
   dataset.map{|r| r[:name]}
-  dataset.map(:name) # same as above
+  dataset.map(:name) # 上と同じ
 
   dataset.inject(0){|sum, r| sum + r[:value]}
-  dataset.sum(:value) # same as above
+  dataset.sum(:value) # 上と同じ
 
-== Filtering (see also {Dataset Filtering}[link:files/doc/dataset_filtering_rdoc.html])
+== フィルタリング ({Dataset Filtering}[link:files/doc/dataset_filtering_rdoc.html] も参照)
 
-=== Equality
+=== 同値
 
   dataset.where(:name => 'abc')
   dataset.where('name = ?', 'abc')
 
-=== Inequality
+=== 不等
 
   dataset.where{value > 100}
   dataset.exclude{value <= 100}
 
-=== Inclusion
+=== 包含
 
   dataset.where(:value => 50..100)
   dataset.where{(value >= 50) & (value <= 100)}
@@ -86,7 +86,7 @@ Without a filename argument, the sqlite adapter will setup a new sqlite database
 
   dataset.where(:id=>other_dataset.select(:other_id))
 
-=== Subselects as scalar values
+=== スカラー値としてのサブセレクト
 
   dataset.where('price > (SELECT avg(price) + 100 FROM table)')
   dataset.where{price > dataset.select(avg(price) + 100)}
@@ -104,7 +104,7 @@ Without a filename argument, the sqlite adapter will setup a new sqlite database
   DB[:items].where({:x => 1, :y => 2}.sql_or & Sequel.~(:z => 3)).sql 
   # SELECT * FROM items WHERE (((x = 1) OR (y = 2)) AND (z != 3))
 
-=== Mathematical operators
+=== 数学演算子
 
   DB[:items].where{x + y > z}.sql 
   # SELECT * FROM items WHERE ((x + y) > z)
@@ -112,7 +112,7 @@ Without a filename argument, the sqlite adapter will setup a new sqlite database
   DB[:items].where{price - 100 < avg(price)}.sql 
   # SELECT * FROM items WHERE ((price - 100) < avg(price))
 
-== Ordering
+== 並び替え
 
   dataset.order(:kind)
   dataset.reverse_order(:kind)
@@ -123,7 +123,7 @@ Without a filename argument, the sqlite adapter will setup a new sqlite database
   dataset.limit(30) # LIMIT 30
   dataset.limit(30, 10) # LIMIT 30 OFFSET 10
 
-== Joins
+== 結合
 
   DB[:items].left_outer_join(:categories, :id => :category_id).sql 
   # SELECT * FROM items LEFT OUTER JOIN categories ON categories.id = items.category_id
@@ -131,9 +131,9 @@ Without a filename argument, the sqlite adapter will setup a new sqlite database
   DB[:items].join(:categories, :id => :category_id).join(:groups, :id => :items__group_id) 
   # SELECT * FROM items INNER JOIN categories ON categories.id = items.category_id INNER JOIN groups ON groups.id = items.group_id
 	
-== Aggregate functions methods
+== 集約関数メソッド
 
-  dataset.count #=> record count
+  dataset.count #=> レコード数
   dataset.max(:price)
   dataset.min(:price)
   dataset.avg(:price)
@@ -142,7 +142,7 @@ Without a filename argument, the sqlite adapter will setup a new sqlite database
   dataset.group_and_count(:category)
   dataset.group(:category).select(:category, Sequel.function(:AVG, :price))
 
-== SQL Functions / Literals
+== SQL 関数 / リテラル
 
   dataset.update(:updated_at => Sequel.function(:NOW))
   dataset.update(:updated_at => Sequel.lit('NOW()'))
@@ -150,7 +150,7 @@ Without a filename argument, the sqlite adapter will setup a new sqlite database
   dataset.update(:updated_at => Sequel.lit("DateValue('1/1/2001')")
   dataset.update(:updated_at => Sequel.function(:DateValue, '1/1/2001'))
 
-== Schema Manipulation
+== スキーマ操作
 
   DB.create_table :items do
     primary_key :id
@@ -169,55 +169,55 @@ Without a filename argument, the sqlite adapter will setup a new sqlite database
     enum :system, :elements => ['mac', 'linux', 'windows']
   end
 
-== Aliasing
+== エイリアス
 
   DB[:items].select(Sequel.as(:name, :item_name))
   DB[:items].select(:name___item_name)
   DB[:items___items_table].select(:items_table__name___item_name)
   # SELECT items_table.name AS item_name FROM items AS items_table
 
-== Transactions
+== トランザクション
 
   DB.transaction do
     dataset.insert(:first_name => 'Inigo', :last_name => 'Montoya')
     dataset.insert(:first_name => 'Farm', :last_name => 'Boy')
-  end # Either both are inserted or neither are inserted
+  end # どちらも挿入されるか、どちらも挿入されません
 
-Database#transaction is re-entrant:
+Database#transaction は再入可能です:
 
-  DB.transaction do # BEGIN issued only here
+  DB.transaction do # BEGIN はここだけで発行されます
     DB.transaction
       dataset << {:first_name => 'Inigo', :last_name => 'Montoya'}
     end
-  end # COMMIT issued only here
+  end # COMMIT はここだけで発行されます
 
-Transactions are aborted if an error is raised:
+エラーが raise するとトランザクションはアボートします:
 
   DB.transaction do
     raise "some error occurred"
-  end # ROLLBACK issued and the error is re-raised
+  end # ROLLBACK が発行され、エラーが再 raise されます
 
-Transactions can also be aborted by raising Sequel::Rollback:
+Sequel::Rollback を raise することによってトランザクションをアボートすることもできます:
 
   DB.transaction do
     raise(Sequel::Rollback) if something_bad_happened
-  end # ROLLBACK issued and no error raised
+  end # ROLLBACK が発行され、エラーは raise されません
 
-Savepoints can be used if the database supports it:
+データベースがサポートしていればセーブポイントも使用できます:
 
   DB.transaction do
-    dataset << {:first_name => 'Farm', :last_name => 'Boy'} # Inserted
-    DB.transaction(:savepoint=>true) # This savepoint is rolled back
-      dataset << {:first_name => 'Inigo', :last_name => 'Montoya'} # Not inserted
+    dataset << {:first_name => 'Farm', :last_name => 'Boy'} # 挿入されます
+    DB.transaction(:savepoint=>true) # このセーブポイントはロールバックされます
+      dataset << {:first_name => 'Inigo', :last_name => 'Montoya'} # 挿入されません
       raise(Sequel::Rollback) if something_bad_happened
     end
-    dataset << {:first_name => 'Prince', :last_name => 'Humperdink'} # Inserted
+    dataset << {:first_name => 'Prince', :last_name => 'Humperdink'} # 挿入されます
   end
 
-== Miscellaneous:
+== その他:
 
   dataset.sql # "SELECT * FROM items"
   dataset.delete_sql # "DELETE FROM items"
   dataset.where(:name => 'sequel').exists # "EXISTS ( SELECT * FROM items WHERE name = 'sequel' )"
-  dataset.columns #=> array of columns in the result set, does a SELECT
+  dataset.columns #=> 結果セット内のカラムの配列。SELECT を実行します
   DB.schema(:items) => [[:id, {:type=>:integer, ...}], [:name, {:type=>:string, ...}], ...]
