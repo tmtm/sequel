@@ -14,6 +14,7 @@ describe "pg_array extension" do
     @db.extension(:pg_array)
     @m = Sequel::Postgres
     @converter = @m::PG_TYPES
+    @db.sqls
   end
 
   it "should parse single dimensional text arrays" do
@@ -300,7 +301,7 @@ describe "pg_array extension" do
     Sequel::Postgres::PG_TYPES[2].should be_a_kind_of(Sequel::Postgres::PGArray::JSONCreator)
   end
 
-  it "should support registering converters with :parser=>:json option" do
+  it "should support registering converters with :parser=>:json option and blocks" do
     Sequel::Postgres::PGArray.register('foo', :oid=>4, :parser=>:json){|s| s * 2}
     Sequel::Postgres::PG_TYPES[4].call('{{1, 2}, {3, 4}}').should == [[2, 4], [6, 8]]
   end
@@ -316,9 +317,55 @@ describe "pg_array extension" do
     @db.schema(:items).map{|e| e[1][:type]}.should == [:float_array]
   end
 
+  it "should support registering custom array types on a per-Database basis" do
+    @db.register_array_type('banana', :oid=>7865){|s| s}
+    @db.typecast_value(:banana_array, []).should be_a_kind_of(Sequel::Postgres::PGArray)
+    @db.fetch = [{:name=>'id', :db_type=>'banana[]'}]
+    @db.schema(:items).map{|e| e[1][:type]}.should == [:banana_array]
+    @db.conversion_procs.should have_key(7865)
+    @db.respond_to?(:typecast_value_banana_array, true).should be_true
+
+    db = Sequel.connect('mock://postgres', :quote_identifiers=>false)
+    db.extend_datasets(Module.new{def supports_timestamp_timezones?; false; end; def supports_timestamp_usecs?; false; end})
+    db.extension(:pg_array)
+    db.fetch = [{:name=>'id', :db_type=>'banana[]'}]
+    db.schema(:items).map{|e| e[1][:type]}.should == [nil]
+    db.conversion_procs.should_not have_key(7865)
+    db.respond_to?(:typecast_value_banana_array, true).should be_false
+  end
+
+  it "should automatically look up the array and scalar oids when registering per-Database types" do
+    @db.fetch = [[{:oid=>21, :typarray=>7866}], [{:name=>'id', :db_type=>'banana[]'}]]
+    @db.register_array_type('banana', :scalar_typecast=>:integer)
+    @db.sqls.should == ["SELECT typarray, oid FROM pg_type WHERE (typname = 'banana') LIMIT 1"]
+    @db.schema(:items).map{|e| e[1][:type]}.should == [:banana_array]
+    @db.conversion_procs[7866].call("{1,2}").should == [1,2]
+    @db.typecast_value(:banana_array, %w'1 2').should == [1,2]
+  end
+
+  it "should not automatically look up oids if given both scalar and array oids" do
+    @db.register_array_type('banana', :oid=>7866, :scalar_oid=>21, :scalar_typecast=>:integer)
+    @db.sqls.should == []
+    @db.conversion_procs[7866].call("{1,2}").should == [1,2]
+    @db.typecast_value(:banana_array, %w'1 2').should == [1,2]
+  end
+
+  it "should not automatically look up oids if given array oid and block" do
+    @db.register_array_type('banana', :oid=>7866, :scalar_typecast=>:integer){|s| s.to_i}
+    @db.sqls.should == []
+    @db.conversion_procs[7866].call("{1,2}").should == [1,2]
+    @db.typecast_value(:banana_array, %w'1 2').should == [1,2]
+  end
+
   it "should set appropriate timestamp conversion procs when getting conversion procs" do
     procs = @db.conversion_procs
     procs[1185].call('{"2011-10-20 11:12:13"}').should == [Time.local(2011, 10, 20, 11, 12, 13)]
     procs[1115].call('{"2011-10-20 11:12:13"}').should == [Time.local(2011, 10, 20, 11, 12, 13)]
+  end
+
+  it "should return correct results for Database#schema_type_class" do
+    @db.register_array_type('banana', :oid=>7866, :scalar_typecast=>:integer){|s| s.to_i}
+    @db.schema_type_class(:banana_array).should == Sequel::Postgres::PGArray
+    @db.schema_type_class(:integer).should == Integer
   end
 end

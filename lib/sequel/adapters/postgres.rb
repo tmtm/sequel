@@ -96,6 +96,15 @@ module Sequel
       def bytea(s) ::Sequel::SQL::Blob.new(Adapter.unescape_bytea(s)) end
     end.new.method(:bytea)
 
+    @use_iso_date_format = true
+
+    class << self
+      # As an optimization, Sequel sets the date style to ISO, so that PostgreSQL provides
+      # the date in a known format that Sequel can parse faster.  This can be turned off
+      # if you require a date style other than ISO.
+      attr_accessor :use_iso_date_format
+    end
+
     # PGconn subclass for connection specific methods used with the
     # pg, postgres, or postgres-pr driver.
     class Adapter < ::PGconn
@@ -160,18 +169,20 @@ module Sequel
       
       set_adapter_scheme :postgres
 
-      # Whether infinite timestamps should be converted on retrieval.  By default, no
+      # Whether infinite timestamps/dates should be converted on retrieval.  By default, no
       # conversion is done, so an error is raised if you attempt to retrieve an infinite
-      # timestamp.  You can set this to :nil to convert to nil, :string to leave
+      # timestamp/date.  You can set this to :nil to convert to nil, :string to leave
       # as a string, or :float to convert to an infinite float.
       attr_reader :convert_infinite_timestamps
-      
+
       # Add the primary_keys and primary_key_sequences instance variables,
       # so we can get the correct return values for inserted rows.
       def initialize(*args)
         super
-        @convert_infinite_timestamps = false
+        @use_iso_date_format = typecast_value_boolean(@opts.fetch(:use_iso_date_format, Postgres.use_iso_date_format))
         initialize_postgres_adapter
+        conversion_procs[1082] = TYPE_TRANSLATOR.method(:date) if @use_iso_date_format
+        self.convert_infinite_timestamps = @opts[:convert_infinite_timestamps]
       end
 
       # Convert given argument so that it can be used directly by pg.  Currently, pg doesn't
@@ -233,16 +244,32 @@ module Sequel
         conn
       end
       
+      # Set whether to allow infinite timestamps/dates.  Make sure the
+      # conversion proc for date reflects that setting.
       def convert_infinite_timestamps=(v)
-        @convert_infinite_timestamps = v
-        pr = old_pr = Postgres.use_iso_date_format ? TYPE_TRANSLATOR.method(:date) : Sequel.method(:string_to_date)
+        @convert_infinite_timestamps = case v
+        when Symbol
+          v
+        when 'nil'
+          :nil
+        when 'string'
+          :string
+        when 'float'
+          :float
+        when String
+          typecast_value_boolean(v)
+        else
+          false
+        end
+
+        pr = old_pr = @use_iso_date_format ? TYPE_TRANSLATOR.method(:date) : Sequel.method(:string_to_date)
         if v
-          pr = lambda do |v|
-            case v
+          pr = lambda do |val|
+            case val
             when *INFINITE_TIMESTAMP_STRINGS
-              infinite_timestamp_value(v)
+              infinite_timestamp_value(val)
             else
-              old_pr.call(v)
+              old_pr.call(val)
             end
           end
         end
@@ -345,7 +372,7 @@ module Sequel
                   conn.put_copy_data(buf)
                 end
               else
-                data.each{|buf| conn.put_copy_data(buf)}
+                data.each{|buff| conn.put_copy_data(buff)}
               end
             rescue Exception => e
               conn.put_copy_end("ruby exception occurred while copying data into PostgreSQL")
@@ -385,7 +412,11 @@ module Sequel
             synchronize(opts[:server]) do |conn|
               begin
                 channels = Array(channels)
-                channels.each{|channel| conn.execute("LISTEN #{dataset.send(:table_ref, channel)}")}
+                channels.each do |channel|
+                  sql = "LISTEN "
+                  dataset.send(:identifier_append, sql, channel)
+                  conn.execute(sql)
+                end
                 opts[:after_listen].call(conn) if opts[:after_listen]
                 timeout = opts[:timeout] ? [opts[:timeout]] : []
                 if l = opts[:loop]
@@ -452,7 +483,7 @@ module Sequel
       # Set the DateStyle to ISO if configured, for faster date parsing.
       def connection_configuration_sqls
         sqls = super
-        sqls << "SET DateStyle = 'ISO'" if Postgres.use_iso_date_format
+        sqls << "SET DateStyle = 'ISO'" if @use_iso_date_format
         sqls
       end
 

@@ -10,7 +10,7 @@ module Sequel
     # Action methods defined by Sequel that execute code on the database.
     ACTION_METHODS = (<<-METHS).split.map{|x| x.to_sym}
       << [] []= all avg count columns columns! delete each
-      empty? fetch_rows first get import insert insert_multiple interval last
+      empty? fetch_rows first first! get import insert insert_multiple interval last
       map max min multi_insert paged_each range select_hash select_hash_groups select_map select_order_map
       set single_record single_value sum to_csv to_hash to_hash_groups truncate update
     METHS
@@ -148,7 +148,7 @@ module Sequel
     def each
       if @opts[:graph]
         graph_each{|r| yield r}
-      elsif row_proc = @row_proc
+      elsif defined?(@row_proc) && (row_proc = @row_proc)
         fetch_rows(select_sql){|r| yield row_proc.call(r)}
       else
         fetch_rows(select_sql){|r| yield r}
@@ -262,7 +262,9 @@ module Sequel
       end
 
       if column.is_a?(Array)
-        ds.single_record.values_at(*column.map{|c| hash_key_symbol(c)})
+       if r = ds.single_record
+         r.values_at(*column.map{|c| hash_key_symbol(c)})
+       end
       else
         ds.single_value
       end

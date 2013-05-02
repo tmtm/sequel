@@ -58,6 +58,12 @@ module Sequel
           super
           clear_instance_filters
         end
+
+        # Freeze the instance filters when freezing the object
+        def freeze
+          instance_filters.freeze
+          super
+        end
       
         # Add an instance filter to the array of instance filters
         # Both the arguments given and the block are passed to the
@@ -85,7 +91,7 @@ module Sequel
         
         # Apply the instance filters to the given dataset
         def apply_instance_filters(ds)
-          instance_filters.inject(ds){|ds, i| ds.filter(*i[0], &i[1])}
+          instance_filters.inject(ds){|ds1, i| ds1.filter(*i[0], &i[1])}
         end
         
         # Clear the instance filters.

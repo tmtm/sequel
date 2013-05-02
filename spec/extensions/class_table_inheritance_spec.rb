@@ -9,7 +9,7 @@ describe "class_table_inheritance plugin" do
        :executives=>[[:id, {:type=>:integer}], [:num_managers, {:type=>:integer}]],
        :staff=>[[:id, {:type=>:integer}], [:manager_id, {:type=>:integer}]],
        }[table.is_a?(Sequel::Dataset) ? table.first_source_table : table]
-     end
+    end
     @db.extend_datasets do
       def columns
         {[:employees]=>[:id, :name, :kind],
@@ -160,6 +160,13 @@ describe "class_table_inheritance plugin" do
   it "should delete the correct rows from all tables when deleting" do
     Executive.load(:id=>1).delete
     @db.sqls.should == ["DELETE FROM executives WHERE (id = 1)", "DELETE FROM managers WHERE (id = 1)", "DELETE FROM employees WHERE (id = 1)"]
+  end
+
+  it "should not allow deletion of frozen object" do
+    o = Executive.load(:id=>1)
+    o.freeze
+    proc{o.delete}.should raise_error(Sequel::Error)
+    @db.sqls.should == []
   end
 
   it "should insert the correct rows into all tables when inserting" do

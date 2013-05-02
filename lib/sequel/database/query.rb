@@ -154,7 +154,7 @@ module Sequel
     #   #    :db_type=>"text",
     #   #    :allow_null=>false}]]
     def schema(table, opts={})
-      raise(Error, 'schema parsing is not implemented on this database') unless respond_to?(:schema_parse_table, true)
+      raise(Error, 'schema parsing is not implemented on this database') unless supports_schema_parsing?
 
       opts = opts.dup
       tab = if table.is_a?(Dataset)
@@ -312,7 +312,7 @@ module Sequel
     # for this database.  Used when parsing metadata so that column symbols are
     # returned as expected.
     def metadata_dataset
-      return @metadata_dataset if @metadata_dataset
+      return @metadata_dataset if defined?(@metadata_dataset) && @metadata_dataset
       ds = dataset
       ds.identifier_input_method = identifier_input_method_default
       ds.identifier_output_method = identifier_output_method_default

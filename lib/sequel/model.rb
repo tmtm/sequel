@@ -72,7 +72,7 @@ module Sequel
 
     # Class methods added to model that call the method of the same name on the dataset
     DATASET_METHODS = (Dataset::ACTION_METHODS + Dataset::QUERY_METHODS +
-      [:eager, :eager_graph, :each_page, :each_server, :print]) - [:and, :or, :[], :[]=, :columns, :columns!]
+      [:each_page, :each_server, :print, :destroy, :with_pk, :with_pk!]) - [:and, :or, :[], :[]=, :columns, :columns!]
     
     # Class instance variables to set to nil when a subclass is created, for -w compliance
     EMPTY_INSTANCE_VARIABLES = [:@overridable_methods_module, :@db]
@@ -114,7 +114,8 @@ module Sequel
       :@typecast_empty_string_to_nil=>nil, :@typecast_on_assignment=>nil,
       :@raise_on_typecast_failure=>nil, :@plugins=>:dup, :@setter_methods=>nil,
       :@use_after_commit_rollback=>nil, :@fast_pk_lookup_sql=>nil,
-      :@fast_instance_delete_sql=>nil}
+      :@fast_instance_delete_sql=>nil, :@default_eager_limit_strategy=>nil,
+      :@db=>nil, :@default_set_fields_options=>:dup}
 
     # Regular expression that determines if a method name is normal in the sense that
     # it could be used literally in ruby code without using send.  Used to
@@ -128,8 +129,13 @@ module Sequel
     @allowed_columns = nil
     @db = nil
     @db_schema = nil
+    @dataset = nil
     @dataset_method_modules = []
+    @default_eager_limit_strategy = nil
+    @default_set_fields_options = {}
     @overridable_methods_module = nil
+    @fast_pk_lookup_sql = nil
+    @fast_instance_delete_sql = nil
     @plugins = []
     @primary_key = :id
     @raise_on_save_failure = true

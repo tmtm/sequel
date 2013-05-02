@@ -33,17 +33,8 @@ module Sequel
         # that can be created is 2^N (where N is the number of free columns).
         attr_reader :prepared_statements_column_defaults
         
-        def inherited(subclass)
-          super
-          subclass.instance_variable_set(:@prepared_statements_column_defaults, @prepared_statements_column_defaults) if @prepared_statements_column_defaults && !subclass.prepared_statements_column_defaults
-        end
-
-        # Set the column defaults to use when creating on the subclass.
-        def set_dataset(*)
-          x = super
-          set_prepared_statements_column_defaults
-          x
-        end
+        Plugins.inherited_instance_variables(self, :@prepared_statements_column_defaults=>:dup)
+        Plugins.after_set_dataset(self, :set_prepared_statements_column_defaults)
 
         private
 

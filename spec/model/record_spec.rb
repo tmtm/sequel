@@ -367,6 +367,12 @@ describe "Model#freeze" do
     @o.frozen?.should be_true
   end
 
+  it "should freeze the object if the model doesn't have a primary key" do
+    Album.no_primary_key
+    @o = Album.load(:id=>1).freeze
+    @o.frozen?.should be_true
+  end
+
   it "should freeze the object's values, associations, changed_columns, errors, and this" do
     @o.values.frozen?.should be_true
     @o.changed_columns.frozen?.should be_true
@@ -433,7 +439,7 @@ describe "Model#marshallable" do
   end
 end
 
-describe "Model#modified[!?]" do
+describe "Model#modified?" do
   before do
     @c = Class.new(Sequel::Model(:items))
     @c.class_eval do
@@ -483,8 +489,47 @@ describe "Model#modified[!?]" do
     o.x = '2'
     o.modified?.should == true
   end
+
+  it "should be true if given a column argument and the column has been changed" do
+    o = @c.new
+    o.modified?(:id).should be_false
+    o.id = 1
+    o.modified?(:id).should be_true
+  end
 end
 
+describe "Model#modified!" do
+  before do
+    @c = Class.new(Sequel::Model(:items))
+    @c.class_eval do
+      columns :id, :x
+    end
+    MODEL_DB.reset
+  end
+
+  it "should mark the object as modified so that save_changes still runs the callbacks" do
+    o = @c.load(:id=>1, :x=>2)
+    def o.after_save
+      values[:x] = 3
+    end
+    o.update({})
+    o.x.should == 2
+
+    o.modified!
+    o.update({})
+    o.x.should == 3
+    o.db.sqls.should == []
+  end
+
+  it "should mark given column argument as modified" do
+    o = @c.load(:id=>1, :x=>2)
+    o.modified!(:x)
+    o.changed_columns.should == [:x]
+    o.save
+    o.db.sqls.should == ["UPDATE items SET x = 2 WHERE (id = 1)"]
+  end
+end
+  
 describe "Model#save_changes" do
   before do
     @c = Class.new(Sequel::Model(:items)) do
@@ -618,8 +663,8 @@ describe "Model#new?" do
   end
 end
 
-describe Sequel::Model, "w/ primary key" do
-  it "should default to ':id'" do
+describe Sequel::Model, "with a primary key" do
+  it "should default to :id" do
     model_a = Class.new Sequel::Model
     model_a.primary_key.should == :id
   end
@@ -640,7 +685,7 @@ describe Sequel::Model, "w/ primary key" do
   end
 end
 
-describe Sequel::Model, "w/o primary key" do
+describe Sequel::Model, "without a primary key" do
   it "should return nil for primary key" do
     Class.new(Sequel::Model){no_primary_key}.primary_key.should be_nil
   end
@@ -651,7 +696,7 @@ describe Sequel::Model, "w/o primary key" do
   end
 end
 
-describe Sequel::Model, "with this" do
+describe Sequel::Model, "#this" do
   before do
     @example = Class.new(Sequel::Model(:examples))
     @example.columns :id, :a, :x, :y
@@ -682,18 +727,18 @@ describe "Model#pk" do
     @m.columns :id, :x, :y
   end
   
-  it "should be default return the value of the :id column" do
+  it "should by default return the value of the :id column" do
     m = @m.load(:id => 111, :x => 2, :y => 3)
     m.pk.should == 111
   end
 
-  it "should be return the primary key value for custom primary key" do
+  it "should return the primary key value for custom primary key" do
     @m.set_primary_key :x
     m = @m.load(:id => 111, :x => 2, :y => 3)
     m.pk.should == 2
   end
 
-  it "should be return the primary key value for composite primary key" do
+  it "should return the primary key value for composite primary key" do
     @m.set_primary_key [:y, :x]
     m = @m.load(:id => 111, :x => 2, :y => 3)
     m.pk.should == [3, 2]
@@ -716,18 +761,18 @@ describe "Model#pk_hash" do
     @m.columns :id, :x, :y
   end
   
-  it "should be default return the value of the :id column" do
+  it "should by default return a hash with the value of the :id column" do
     m = @m.load(:id => 111, :x => 2, :y => 3)
     m.pk_hash.should == {:id => 111}
   end
 
-  it "should be return the primary key value for custom primary key" do
+  it "should return a hash with the primary key value for custom primary key" do
     @m.set_primary_key :x
     m = @m.load(:id => 111, :x => 2, :y => 3)
     m.pk_hash.should == {:x => 2}
   end
 
-  it "should be return the primary key value for composite primary key" do
+  it "should return a hash with the primary key values for composite primary key" do
     @m.set_primary_key [:y, :x]
     m = @m.load(:id => 111, :x => 2, :y => 3)
     m.pk_hash.should == {:y => 3, :x => 2}
@@ -918,7 +963,6 @@ describe Sequel::Model, "#set_fields" do
       set_primary_key :id
       columns :x, :y, :z, :id
     end
-    @c.strict_param_setting = true 
     @o1 = @c.new
     MODEL_DB.reset
   end
@@ -967,6 +1011,29 @@ describe Sequel::Model, "#set_fields" do
     MODEL_DB.sqls.should == []
   end
 
+  it "should respect model's default_set_fields_options" do
+    @c.default_set_fields_options = {:missing=>:skip}
+    @o1.set_fields({:x => 3}, [:x, :y])
+    @o1.values.should == {:x => 3}
+    @o1.set_fields({:x => 4}, [:x, :y], {})
+    @o1.values.should == {:x => 4}
+    proc{@o1.set_fields({:x => 3}, [:x, :y], :missing=>:raise)}.should raise_error(Sequel::Error)
+    @c.default_set_fields_options = {:missing=>:raise}
+    proc{@o1.set_fields({:x => 3}, [:x, :y])}.should raise_error(Sequel::Error)
+    proc{@o1.set_fields({:x => 3}, [:x, :y], {})}.should raise_error(Sequel::Error)
+    @o1.set_fields({:x => 5}, [:x, :y], :missing=>:skip)
+    @o1.values.should == {:x => 5}
+    @o1.set_fields({:x => 5}, [:x, :y], :missing=>nil)
+    @o1.values.should == {:x => 5, :y=>nil}
+    MODEL_DB.sqls.should == []
+  end
+
+  it "should respect model's default_set_fields_options in a subclass" do
+    @c.default_set_fields_options = {:missing=>:skip}
+    o = Class.new(@c).new
+    o.set_fields({:x => 3}, [:x, :y])
+    o.values.should == {:x => 3}
+  end
 end
 
 describe Sequel::Model, "#update_fields" do
@@ -1000,6 +1067,17 @@ describe Sequel::Model, "#update_fields" do
 
   it "should support :missing=>:raise option" do
     proc{@o1.update_fields({:x => 1}, [:x, :y], :missing=>:raise)}.should raise_error(Sequel::Error)
+  end
+
+  it "should respect model's default_set_fields_options" do
+    @c.default_set_fields_options = {:missing=>:skip}
+    @o1.update_fields({:x => 3}, [:x, :y])
+    @o1.values.should == {:x => 3, :id=>1}
+    MODEL_DB.sqls.should == ["UPDATE items SET x = 3 WHERE (id = 1)"]
+
+    @c.default_set_fields_options = {:missing=>:raise}
+    proc{@o1.update_fields({:x => 3}, [:x, :y])}.should raise_error(Sequel::Error)
+    MODEL_DB.sqls.should == []
   end
 end
 
@@ -1449,7 +1527,7 @@ describe Sequel::Model, ".create" do
     MODEL_DB.sqls.should == ["INSERT INTO items DEFAULT VALUES", "SELECT * FROM items WHERE (id = 10) LIMIT 1"]
   end
 
-  it "should accept a block and run it" do
+  it "should accept a block and call it" do
     o1, o2, o3 =  nil, nil, nil
     o = @c.create {|o4| o1 = o4; o3 = o4; o2 = :blah; o3.x = 333}
     o.class.should == @c
@@ -1884,5 +1962,13 @@ describe "Model#lock!" do
     x.should == o
     o.instance_variable_get(:@a).should == 1
     MODEL_DB.sqls.should == ["SELECT * FROM items WHERE (id = 1) LIMIT 1 FOR UPDATE"]
+  end
+end
+
+describe "Model#schema_type_class" do
+  specify "should return the class or array of classes for the given type symbol" do
+    @c = Class.new(Sequel::Model(:items))
+    @c.class_eval{@db_schema = {:id=>{:type=>:integer}}}
+    @c.new.send(:schema_type_class, :id).should == Integer
   end
 end

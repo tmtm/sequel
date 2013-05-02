@@ -91,28 +91,28 @@ describe "Composition plugin" do
   end
 
   it "should clear compositions cache when using set_values" do
-    @c.composition :date, :composer=>proc{}, :decomposer=>proc{called = true}
+    @c.composition :date, :composer=>proc{}, :decomposer=>proc{}
     @o.date = Date.new(3, 4, 5)
     @o.set_values(:id=>1)
     @o.compositions.should == {}
   end
 
   it "should clear compositions cache when refreshing" do
-    @c.composition :date, :composer=>proc{}, :decomposer=>proc{called = true}
+    @c.composition :date, :composer=>proc{}, :decomposer=>proc{}
     @o.date = Date.new(3, 4, 5)
     @o.refresh
     @o.compositions.should == {}
   end
 
   it "should clear compositions cache when refreshing after save" do
-    @c.composition :date, :composer=>proc{}, :decomposer=>proc{called = true}
+    @c.composition :date, :composer=>proc{}, :decomposer=>proc{}
     @c.create(:date=>Date.new(3, 4, 5)).compositions.should == {}
   end
 
   it "should clear compositions cache when saving with insert_select" do
     def (@c.instance_dataset).supports_insert_select?() true end
     def (@c.instance_dataset).insert_select(*) {:id=>1} end
-    @c.composition :date, :composer=>proc{}, :decomposer=>proc{called = true}
+    @c.composition :date, :composer=>proc{}, :decomposer=>proc{}
     @c.create(:date=>Date.new(3, 4, 5)).compositions.should == {}
   end
 
@@ -125,7 +125,7 @@ describe "Composition plugin" do
 
   it "should cache value of composition" do
     times = 0
-    @c.composition :date, :composer=>proc{times+=1}, :decomposer=>proc{called = true}
+    @c.composition :date, :composer=>proc{times+=1}, :decomposer=>proc{}
     times.should == 0
     @o.date
     times.should == 1
@@ -199,6 +199,13 @@ describe "Composition plugin" do
     sql.should include("year = NULL")
     sql.should include("month = NULL")
     sql.should include("day = NULL")
+  end
+
+  it "should work with frozen instances" do
+    @c.composition :date, :mapping=>[:year, :month, :day]
+    @o.freeze
+    @o.date.should == Date.new(1, 2, 3)
+    proc{@o.date = Date.today}.should raise_error
   end
 
   it "should work correctly with subclasses" do

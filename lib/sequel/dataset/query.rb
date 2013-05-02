@@ -495,7 +495,7 @@ module Sequel
       using_join = expr.is_a?(Array) && !expr.empty? && expr.all?{|x| x.is_a?(Symbol)}
       if using_join && !supports_join_using?
         h = {}
-        expr.each{|s| h[s] = s}
+        expr.each{|e| h[e] = e}
         return join_table(type, table, h, options)
       end
 
@@ -600,11 +600,14 @@ module Sequel
     end
     
     # Returns a cloned dataset with the given lock style.  If style is a
-    # string, it will be used directly.  Otherwise, a symbol may be used
-    # for database independent locking.  Currently :update is respected
-    # by most databases, and :share is supported by some.
+    # string, it will be used directly. You should never pass a string
+    # to this method that is derived from user input, as that can lead to
+    # SQL injection.
     #
-    #   DB[:items].lock_style('FOR SHARE') # SELECT * FROM items FOR SHARE
+    # A symbol may be used for database independent locking behavior, but
+    # all supported symbols have separate methods (e.g. for_update).
+    #
+    #   DB[:items].lock_style('FOR SHARE NOWAIT') # SELECT * FROM items FOR SHARE NOWAIT
     def lock_style(style)
       clone(:lock => style)
     end
@@ -1107,7 +1110,6 @@ module Sequel
     #   DB[:items].invert_order([:category, Sequel.desc(:price)]) #=> [Sequel.desc(:category), Sequel.asc(:price)]
     def invert_order(order)
       return nil unless order
-      new_order = []
       order.map do |f|
         case f
         when SQL::OrderedExpression

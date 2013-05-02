@@ -17,8 +17,8 @@
 #
 #   Sequel.pg_array(array)
 #
-# If you have loaded the {core_extensions extension}[link:files/doc/core_extensions_rdoc.html]),
-# or you have loaded the {core_refinements extension}[link:files/doc/core_refinements_rdoc.html])
+# If you have loaded the {core_extensions extension}[link:files/doc/core_extensions_rdoc.html],
+# or you have loaded the {core_refinements extension}[link:files/doc/core_refinements_rdoc.html]
 # and have activated refinements for the file, you can also use Array#pg_array:
 #
 #   array.pg_array
@@ -32,15 +32,14 @@
 #
 #   DB[:table].insert(:column=>Sequel.pg_array([1, 2, 3]))
 #
-# If you would like to use PostgreSQL arrays in your model objects, you
-# probably want to modify the schema parsing/typecasting so that it
-# recognizes and correctly handles the arrays, which you can do by:
+# To use this extension, first load it into your Sequel::Database instance:
 #
 #   DB.extension :pg_array
 #
-# If you are not using the native postgres adapter, you probably
-# also want to use the typecast_on_load plugin in the model, and
-# set it to typecast the array column(s) on load.
+# If you are not using the native postgres adapter and are using array
+# types as model column values you probably should use the
+# pg_typecast_on_load plugin in the model, and set it to typecast the
+# array column(s) on load.
 #
 # This extension by default includes handlers for array types for
 # all scalar types that the native postgres adapter handles. It
@@ -48,18 +47,24 @@
 # general, you just need to make sure that the scalar type is
 # handled and has the appropriate converter installed in
 # Sequel::Postgres::PG_TYPES under the appropriate type OID.
-# Then you can call Sequel::Postgres::PGArray.register with
-# the appropriate arguments to automatically set up a handler
-# for the array type.
+# Then you can call
+# Sequel::Postgres::PGArray::DatabaseMethods#register_array_type
+# to automatically set up a handler for the array type.  So if you
+# want to support the foo[] type (assuming the foo type is already
+# supported):
 #
-# For example, if you add support for a scalar custom type named
-# foo which uses OID 1234, and you want to add support for the
-# foo[] type, which uses type OID 4321, you need to do:
+#   DB.register_array_type('foo')
+#
+# You can also register array types on a global basis using
+# Sequel::Postgres::PGArray.register.  In this case, you'll have
+# to specify the type oids:
 #
 #   Sequel::Postgres::PGArray.register('foo', :oid=>4321, :scalar_oid=>1234)
 #
-# Sequel::Postgres::PGArray.register has many additional options
-# and should be able to handle most PostgreSQL array types.
+# Both Sequel::Postgres::PGArray::DatabaseMethods#register_array_type
+# and Sequel::Postgres::PGArray.register support many options to
+# customize the array type handling.  See the Sequel::Postgres::PGArray.register
+# method documentation.
 #
 # If you want an easy way to call PostgreSQL array functions and
 # operators, look into the pg_array_ops extension.
@@ -115,8 +120,8 @@ module Sequel
       NULL = 'NULL'.freeze
       QUOTE = '"'.freeze
 
-      # Hash of database array type name strings to symbols (e.g. 'double precision' => :float),
-      # used by the schema parsing.
+      # Global hash of database array type name strings to symbols (e.g. 'double precision' => :float),
+      # used by the schema parsing for array types registered globally.
       ARRAY_TYPES = {}
 
       # Registers an array type that the extension should handle.  Makes a Database instance that
@@ -153,6 +158,8 @@ module Sequel
       #                     typecasting method to be created in the database.  This should only be used
       #                     to alias existing array types.  For example, if there is an array type that can be
       #                     treated just like an integer array, you can do :typecast_method=>:integer.
+      # :typecast_method_map :: The map in which to place the database type string to type symbol mapping.
+      #                         Defaults to ARRAY_TYPES.
       # :typecast_methods_module :: If given, a module object to add the typecasting method to.  Defaults
       #                             to DatabaseMethods.
       #
@@ -163,6 +170,7 @@ module Sequel
         type = (typecast_method || opts[:type_symbol] || db_type).to_sym
         type_procs = opts[:type_procs] || PG_TYPES
         mod = opts[:typecast_methods_module] || DatabaseMethods
+        typecast_method_map = opts[:typecast_method_map] || ARRAY_TYPES
 
         if converter = opts[:converter]
           raise Error, "can't provide both a block and :converter option to register" if block
@@ -178,7 +186,7 @@ module Sequel
         array_type = (opts[:array_type] || db_type).to_s.dup.freeze
         creator = (opts[:parser] == :json ? JSONCreator : Creator).new(array_type, converter)
 
-        ARRAY_TYPES[db_type] = :"#{type}_array"
+        typecast_method_map[db_type] = :"#{type}_array"
 
         define_array_typecast_method(mod, type, creator, opts.fetch(:scalar_typecast, type)) unless typecast_method
 
@@ -208,6 +216,22 @@ module Sequel
         ESCAPE_REPLACEMENT = '\\\\\1'.freeze
         BLOB_RANGE = 1...-1
 
+        # Create the local hash of database type strings to schema type symbols,
+        # used for array types local to this database.
+        def self.extended(db)
+          db.instance_eval do
+            @pg_array_schema_types ||= {}
+            copy_conversion_procs([1009, 1007, 1016, 1231, 1022, 1000, 1001, 1182, 1183, 1270, 1005, 1028, 1021, 1014, 1015])
+            [:string_array, :integer_array, :decimal_array, :float_array, :boolean_array, :blob_array, :date_array, :time_array, :datetime_array].each do |v|
+              @schema_type_classes[v] = PGArray
+            end
+          end
+
+          procs = db.conversion_procs
+          procs[1115] = Creator.new("timestamp without time zone", procs[1114])
+          procs[1185] = Creator.new("timestamp with time zone", procs[1184])
+        end
+
         # Handle arrays in bound variables
         def bound_variable_arg(arg, conn)
           case arg
@@ -220,13 +244,24 @@ module Sequel
           end
         end
 
-        # Make the column type detection handle registered array types.
-        def schema_column_type(db_type)
-          if (db_type =~ /\A([^(]+)(?:\([^(]+\))?\[\]\z/io) && (type = ARRAY_TYPES[$1])
-            type
-          else
-            super
+        # Register a database specific array type.  This can be used to support
+        # different array types per Database.  Use of this method does not
+        # affect global state, unlike PGArray.register.  See PGArray.register for
+        # possible options.
+        def register_array_type(db_type, opts={}, &block)
+          opts = {:type_procs=>conversion_procs, :typecast_method_map=>@pg_array_schema_types, :typecast_methods_module=>(class << self; self; end)}.merge(opts)
+          unless (opts.has_key?(:scalar_oid) || block) && opts.has_key?(:oid)
+            array_oid, scalar_oid = from(:pg_type).where(:typname=>db_type.to_s).get([:typarray, :oid])
+            opts[:scalar_oid] = scalar_oid unless opts.has_key?(:scalar_oid) || block
+            opts[:oid] = array_oid unless opts.has_key?(:oid)
           end
+          PGArray.register(db_type, opts, &block)
+          @schema_type_classes[:"#{opts[:typecast_method] || opts[:type_symbol] || db_type}_array"] = PGArray
+        end
+
+        # Return PGArray if this type matches any supported array type.
+        def schema_type_class(type)
+          super || (ARRAY_TYPES.each_value{|v| return PGArray if type == v}; nil)
         end
 
         private
@@ -247,6 +282,15 @@ module Sequel
           end
         end
 
+        # Automatically handle array types for the given named types. 
+        def convert_named_procs_to_procs(named_procs)
+          h = super
+          from(:pg_type).where(:oid=>h.keys).select_map([:typname, :oid, :typarray]).each do |name, scalar_oid, array_oid|
+            register_array_type(name, :type_procs=>h, :oid=>array_oid.to_i, :scalar_oid=>scalar_oid.to_i)
+          end
+          h
+        end
+
         # Manually override the typecasting for timestamp array types so that
         # they use the database's timezone instead of the global Sequel
         # timezone.
@@ -257,6 +301,22 @@ module Sequel
           procs[1185] = Creator.new("timestamp with time zone", procs[1184])
 
           procs
+        end
+
+        # Look into both the current database's array schema types and the global
+        # array schema types to get the type symbol for the given database type
+        # string.
+        def pg_array_schema_type(type)
+          @pg_array_schema_types[type] || ARRAY_TYPES[type]
+        end
+
+        # Make the column type detection handle registered array types.
+        def schema_column_type(db_type)
+          if (db_type =~ /\A([^(]+)(?:\([^(]+\))?\[\]\z/io) && (type = pg_array_schema_type($1))
+            type
+          else
+            super
+          end
         end
 
         # Given a value to typecast and the type of PGArray subclass:

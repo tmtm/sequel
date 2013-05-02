@@ -164,12 +164,12 @@ describe Sequel::Model do
   end
 end
 
-describe Sequel::Model, "dataset & schema" do
+describe Sequel::Model do
   before do
     @model = Class.new(Sequel::Model(:items))
   end
 
-  it "creates dynamic model subclass with set table name" do
+  it "has table_name return name of table" do
     @model.table_name.should == :items
   end
 
@@ -187,31 +187,31 @@ describe Sequel::Model, "dataset & schema" do
     @model.table_name.should == :foo
   end
 
-  it "set_dataset should take a Symbol" do
+  it "allows set_dataset to accept a Symbol" do
     @model.db = MODEL_DB
     @model.set_dataset(:foo)
     @model.table_name.should == :foo
   end
 
-  it "set_dataset should take a LiteralString" do
+  it "allows set_dataset to accept a LiteralString" do
     @model.db = MODEL_DB
     @model.set_dataset(Sequel.lit('foo'))
     @model.table_name.should == Sequel.lit('foo')
   end
 
-  it "set_dataset should take an SQL::Identifier" do
+  it "allows set_dataset to acceptan SQL::Identifier" do
     @model.db = MODEL_DB
     @model.set_dataset(Sequel.identifier(:foo))
     @model.table_name.should == Sequel.identifier(:foo)
   end
 
-  it "set_dataset should take an SQL::QualifiedIdentifier" do
+  it "allows set_dataset to acceptan SQL::QualifiedIdentifier" do
     @model.db = MODEL_DB
     @model.set_dataset(Sequel.qualify(:bar, :foo))
     @model.table_name.should == Sequel.qualify(:bar, :foo)
   end
 
-  it "set_dataset should take an SQL::AliasedExpression" do
+  it "allows set_dataset to acceptan SQL::AliasedExpression" do
     @model.db = MODEL_DB
     @model.set_dataset(Sequel.as(:foo, :bar))
     @model.table_name.should == :bar
@@ -265,6 +265,25 @@ describe Sequel::Model, "dataset & schema" do
   it "doesn't raise an error on inherited if there is an error setting the dataset" do
     def @model.set_dataset(*) raise Sequel::Error end
     proc{Class.new(@model)}.should_not raise_error
+  end
+
+  it "should raise if bad inherited instance variable value is used" do
+    def @model.inherited_instance_variables() super.merge(:@a=>:foo) end
+    @model.instance_eval{@a=1}
+    proc{Class.new(@model)}.should raise_error(Sequel::Error)
+  end
+
+  it "copy inherited instance variables into subclass if set" do
+    def @model.inherited_instance_variables() super.merge(:@a=>nil, :@b=>:dup, :@c=>:hash_dup, :@d=>proc{|v| v * 2}) end
+    @model.instance_eval{@a=1; @b=[2]; @c={3=>[4]}; @d=10}
+    m = Class.new(@model)
+    @model.instance_eval{@a=5; @b << 6; @c[3] << 7; @c[8] = [9]; @d=40}
+    m.instance_eval do
+      @a.should == 1
+      @b.should == [2]
+      @c.should == {3=>[4]}
+      @d.should == 20
+    end
   end
 end
 
@@ -621,8 +640,7 @@ describe "Model.db_schema" do
     @dataset = @db[:items]
   end
   
-  specify "should use the database's schema_for_table and set the columns and dataset columns" do
-    d = @dataset.db
+  specify "should use the database's schema and set the columns and dataset columns" do
     def @db.schema(table, opts = {})
       [[:x, {:type=>:integer}], [:y, {:type=>:string}]]
     end

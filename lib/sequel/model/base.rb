@@ -22,6 +22,10 @@ module Sequel
       # with all of these modules.
       attr_reader :dataset_method_modules
 
+      # The default options to use for Model#set_fields.  These are merged with
+      # the options given to set_fields.
+      attr_accessor :default_set_fields_options
+
       # SQL string fragment used for faster DELETE statement creation when deleting/destroying
       # model instances, or nil if the optimization should not be used. For internal use only.
       attr_reader :fast_instance_delete_sql
@@ -49,10 +53,9 @@ module Sequel
       # Whether to raise an error when unable to typecast data for a column
       # (default: true).  This should be set to false if you want to use
       # validations to display nice error messages to the user (e.g. most
-      # web applications).  You can use the validates_not_string validations
-      # (from either the validation_helpers or validation_class_methods standard
-      # plugins) in connection with option to check for typecast failures for
-      # columns that aren't blobs or strings.
+      # web applications).  You can use the validates_schema_types validation
+      # (from the validation_helpers plugin) in connection with this setting to
+      # check for typecast failures during validation.
       attr_accessor :raise_on_typecast_failure
       
       # Whether to raise an error if an UPDATE or DELETE query related to
@@ -245,6 +248,10 @@ module Sequel
       #
       #   Sequel::Model.db = DB1
       #   Artist.db = DB2
+      #
+      # Note that you should not use this to change the model's database
+      # at runtime.  If you have that need, you should look into Sequel's
+      # sharding support.
       def db=(db)
         @db = db
         set_dataset(db.dataset(@dataset.opts)) if @dataset
@@ -350,11 +357,22 @@ module Sequel
       def inherited(subclass)
         super
         ivs = subclass.instance_variables.collect{|x| x.to_s}
-        EMPTY_INSTANCE_VARIABLES.each{|iv| subclass.instance_variable_set(iv, nil) unless ivs.include?(iv.to_s)}
-        INHERITED_INSTANCE_VARIABLES.each do |iv, dup|
+        inherited_instance_variables.each do |iv, dup|
           next if ivs.include?(iv.to_s)
-          sup_class_value = instance_variable_get(iv)
-          sup_class_value = sup_class_value.dup if dup == :dup && sup_class_value
+          if (sup_class_value = instance_variable_get(iv)) && dup
+            sup_class_value = case dup
+            when :dup
+              sup_class_value.dup
+            when :hash_dup
+              h = {}
+              sup_class_value.each{|k,v| h[k] = v.dup}
+              h
+            when Proc
+              dup.call(sup_class_value)
+            else
+              raise Error, "bad inherited instance variable type: #{dup.inspect}"
+            end
+          end
           subclass.instance_variable_set(iv, sup_class_value)
         end
         unless ivs.include?("@dataset")
@@ -369,7 +387,7 @@ module Sequel
           end
         end
       end
-    
+
       # Returns the implicit table name for the model class, which is the demodulized,
       # underscored, pluralized name of the class.
       #
@@ -497,6 +515,10 @@ module Sequel
       #
       #   Artist.set_dataset(:tbl_artists)
       #   Artist.set_dataset(DB[:artists])
+      #
+      # Note that you should not use this to change the model's dataset
+      # at runtime.  If you have that need, you should look into Sequel's
+      # sharding support.
       def set_dataset(ds, opts={})
         inherited = opts[:inherited]
         @dataset = case ds
@@ -647,7 +669,7 @@ module Sequel
       # module if the model has a dataset.  Add dataset methods to the class for all
       # public dataset methods.
       def dataset_extend(mod)
-        @dataset.extend(mod) if @dataset
+        @dataset.extend(mod) if defined?(@dataset) && @dataset
         reset_instance_dataset
         dataset_method_modules << mod
         mod.public_instance_methods.each{|meth| def_model_dataset_method(meth)}
@@ -732,6 +754,14 @@ module Sequel
         schema_hash
       end
       
+      # A hash of instance variables to automatically set up in subclasses.
+      # See Sequel::Model::INHERITED_INSTANCE_VARIABLES.  It is safe to modify
+      # the hash returned by this method, though it may not be safe to modify
+      # values of the hash.
+      def inherited_instance_variables
+        INHERITED_INSTANCE_VARIABLES.dup
+      end
+    
       # For the given opts hash and default name or :class option, add a
       # :class_name option unless already present which contains the name
       # of the class to use as a string.  The purpose is to allow late
@@ -750,7 +780,7 @@ module Sequel
       # Module that the class includes that holds methods the class adds for column accessors and
       # associations so that the methods can be overridden with +super+.
       def overridable_methods_module
-        include(@overridable_methods_module = Module.new) unless @overridable_methods_module
+        include(@overridable_methods_module = Module.new) unless defined?(@overridable_methods_module) && @overridable_methods_module
         @overridable_methods_module
       end
       
@@ -818,7 +848,7 @@ module Sequel
       # Reset the instance dataset to a modified copy of the current dataset,
       # should be used whenever the model's dataset is modified.
       def reset_instance_dataset
-        @instance_dataset = @dataset.limit(1).naked if @dataset
+        @instance_dataset = @dataset.limit(1).naked if defined?(@dataset) && @dataset
       end
   
       # Set the columns for this model and create accessor methods for each column.
@@ -841,7 +871,7 @@ module Sequel
       end
 
       # Add model methods that call dataset methods
-      DATASET_METHODS.each{|arg| class_eval("def #{arg}(*args, &block); dataset.#{arg}(*args, &block) end", __FILE__, __LINE__)}
+      Plugins.def_dataset_methods(self, DATASET_METHODS)
   
       # Returns a copy of the model's dataset with custom SQL
       #
@@ -891,7 +921,7 @@ module Sequel
       private_class_method :class_attr_overridable, :class_attr_reader
 
       class_attr_reader :columns, :db, :primary_key, :db_schema
-      class_attr_overridable *BOOLEAN_SETTINGS
+      class_attr_overridable(*BOOLEAN_SETTINGS)
 
       # The hash of attribute values.  Keys are symbols with the names of the
       # underlying database columns.
@@ -1077,7 +1107,7 @@ module Sequel
         errors
         validate
         errors.freeze
-        this.freeze unless new?
+        this.freeze if !new? && model.primary_key
         super
       end
   
@@ -1153,7 +1183,18 @@ module Sequel
       #   a.save_changes # No callbacks run, as no changes
       #   a.modified!
       #   a.save_changes # Callbacks run, even though no changes made
-      def modified!
+      #
+      # If a column is given, specifically marked that column as modified,
+      # so that +save_changes+/+update+ will include that column in the
+      # update. This should be used if you plan on mutating the column
+      # value instead of assigning a new column value:
+      #
+      #   a.modified!(:name)
+      #   a.name.gsub!(/[aeou]/, 'i')
+      def modified!(column=nil)
+        if column && !changed_columns.include?(column)
+          changed_columns << column
+        end
         @modified = true
       end
 
@@ -1165,8 +1206,19 @@ module Sequel
       #   a.modified? # => false
       #   a.set(:name=>'Jim')
       #   a.modified? # => true
-      def modified?
-        @modified || !changed_columns.empty?
+      #
+      # If a column is given, specifically check if the given column has
+      # been modified:
+      #
+      #   a.modified?(:num_albums) # => false
+      #   a.num_albums = 10
+      #   a.modified?(:num_albums) # => true
+      def modified?(column=nil)
+        if column
+          changed_columns.include?(column)
+        else
+          @modified || !changed_columns.empty?
+        end
       end
   
       # Returns true if the current instance represents a new record.
@@ -1331,28 +1383,30 @@ module Sequel
       #   artist.set_fields({}, [:name], :missing=>:raise)
       #   # Sequel::Error raised
       def set_fields(hash, fields, opts=nil)
-        if opts
-          case opts[:missing]
-          when :skip
-            fields.each do |f|
-              if hash.has_key?(f) 
-                send("#{f}=", hash[f])
-              elsif f.is_a?(Symbol) && hash.has_key?(sf = f.to_s)
-                send("#{sf}=", hash[sf])
-              end
+        opts = if opts
+          model.default_set_fields_options.merge(opts)
+        else
+          model.default_set_fields_options
+        end
+
+        case opts[:missing]
+        when :skip
+          fields.each do |f|
+            if hash.has_key?(f) 
+              send("#{f}=", hash[f])
+            elsif f.is_a?(Symbol) && hash.has_key?(sf = f.to_s)
+              send("#{sf}=", hash[sf])
             end
-          when :raise
-            fields.each do |f|
-              if hash.has_key?(f)
-                send("#{f}=", hash[f])
-              elsif f.is_a?(Symbol) && hash.has_key?(sf = f.to_s)
-                send("#{sf}=", hash[sf])
-              else
-                raise(Sequel::Error, "missing field in hash: #{f.inspect} not in #{hash.inspect}")
-              end
+          end
+        when :raise
+          fields.each do |f|
+            if hash.has_key?(f)
+              send("#{f}=", hash[f])
+            elsif f.is_a?(Symbol) && hash.has_key?(sf = f.to_s)
+              send("#{sf}=", hash[sf])
+            else
+              raise(Sequel::Error, "missing field in hash: #{f.inspect} not in #{hash.inspect}")
             end
-          else
-            fields.each{|f| send("#{f}=", hash[f])}
           end
         else
           fields.each{|f| send("#{f}=", hash[f])}
@@ -1761,6 +1815,13 @@ module Sequel
         raise HookFailed.new("the #{type} hook failed", self)
       end
   
+      # Get the ruby class or classes related to the given column's type.
+      def schema_type_class(column)
+        if (sch = db_schema[column]) && (type = sch[:type])
+          db.schema_type_class(type)
+        end
+      end
+
       # Set the columns, filtered by the only and except arrays.
       def set_restricted(hash, only, except)
         return self if hash.empty?

@@ -1,4 +1,100 @@
-=== HEAD
+=== 3.47.0 (2013-05-01)
+
+* Don't fail for missing conversion proc in pg_typecast_on_load plugin (jeremyevans)
+
+* Rename PGRangeOp #starts_before and #ends_after to #ends_before and #starts_after (soupmatt) (#655)
+
+* Add Database#supports_schema_parsing? for checking for schema parsing support (jeremyevans)
+
+* Handle hstore[] types on PostgreSQL if using pg_array and pg_hstore extensions (jeremyevans)
+
+* Don't reset conversion procs when loading pg_* extensions (jeremyevans)
+
+* Handle domain types when parsing the schema on PostgreSQL (jeremyevans)
+
+* Handle domain types in composite types in the pg_row extension (jeremyevans)
+
+* Add Database.extension, for loading an extension into all future databases (jeremyevans)
+
+* Support a :search_path Database option for setting PostgreSQL search_path (jeremyevans)
+
+* Support a :convert_infinite_timestamps Database option in the postgres adapter (jeremyevans)
+
+* Support a :use_iso_date_format Database option in the postgres adapter, for per-Database specific behavior (jeremyevans)
+
+* Add Model.default_set_fields_options, for having a model-wide default setting (jeremyevans)
+
+* Make Model.map, .to_hash, and .to_hash_groups work without a query when using the static_cache plugin (jeremyevans)
+
+* Support :hash_dup and Proc Model inherited instance variable types (jeremyevans)
+
+* Handle aliased tables in the pg_row plugin (jeremyevans)
+
+* Add input_transformer plugin, for automatically transform input to model column setters (jeremyevans)
+
+* Add auto_validations plugin, for automatically adding not null, type, and unique validations (jeremyevans)
+
+* Add validates_not_null to validation_helpers (jeremyevans)
+
+* Add :setter, :adder, :remover, and :clearer association options for overriding the default modification behavior (jeremyevans)
+
+* Add Database#register_array_type to the pg_array extension, for registering database-specific array types (jeremyevans)
+
+* Speed up fetching model instances when using update_primary_key plugin (jeremyevans)
+
+* In the update_primary_key plugin, if the primary key column changes, clear related associations (jeremyevans)
+
+* Add :allow_missing_migration_files option to migrators, for not raising if migration files are missing (bporterfield) (#652)
+
+* Fix race condition related to prepared_sql for newly prepared statements (jeremyevans) (#651)
+
+* Support :keep_reference=>false Database option for not adding reference to Sequel::DATABASES (jeremyevans)
+
+* Make Postgres::HStoreOp#- explicitly cast a string argument to text, to avoid PostgreSQL assuming it is an hstore (jeremyevans)
+
+* Add validates_schema_types validation for validating column values are instances of an appropriate class (jeremyevans)
+
+* Allow validates_type validation to accept an array of allowable classes (jeremyevans)
+
+* Add Database#schema_type_class for getting the ruby class or classes related to the type symbol (jeremyevans)
+
+* Add error_splitter plugin, for splitting multi-column errors into separate errors per column (jeremyevans)
+
+* Skip validates_unique validation if underlying columns are not valid (jeremyevans)
+
+* Allow Model#modified! to take an optional column argument and mark that column as being modified (jeremyevans)
+
+* Allow Model#modified? to take an optional column argument and check if that column has been modified (jeremyevans)
+
+* Make Model.count not issue a database query if using the static_cache plugin (jeremyevans)
+
+* Handle more corner cases in the many_to_one_pk_lookup plugin (jeremyevans)
+
+* Handle database connection during initialization in jdbc adapter (jeremyevans) (#646)
+
+* Add Database.after_initialize, which takes a block and calls the block with each newly created Database instance (ged) (#641)
+
+* Add a guide detailing PostgreSQL-specific support (jeremyevans)
+
+* Make model plugins deal with frozen instances (jeremyevans)
+
+* Allow freezing of model instances for models without primary keys (jeremyevans)
+
+* Reflect constraint_validations extension :allow_nil=>true setting in the database constraints (jeremyevans)
+
+* Add Plugins.after_set_dataset for easily running code after set_dataset (jeremyevans)
+
+* Add Plugins.inherited_instance_variables for easily setting class instance variables when subclassing (jeremyevans)
+
+* Add Plugins.def_dataset_methods for easily defining class methods that call dataset methods (jeremyevans)
+
+* Make lazy_attributes plugin no longer depend on identity_map plugin (jeremyevans)
+
+* Make Dataset#get with an array of values handle case where no row is returned (jeremyevans)
+
+* Make caching plugin handle memcached API for deletes if ignore_exceptions option is used (rintaun) (#639)
+
+=== 3.46.0 (2013-04-02)
 
 * Add Dataset#cross_apply and Dataset#outer_apply on Microsoft SQL Server (jeremyevans)
 

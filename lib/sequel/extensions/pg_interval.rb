@@ -16,7 +16,7 @@
 #   DB.extension :pg_interval
 #
 # If you are not using the native postgres adapter, you probably
-# also want to use the typecast_on_load plugin in the model, and
+# also want to use the pg_typecast_on_load plugin in the model, and
 # set it to typecast the interval type column(s) on load.
 #
 # This extension integrates with the pg_array extension.  If you plan
@@ -119,7 +119,11 @@ module Sequel
       # Reset the conversion procs if using the native postgres adapter,
       # and extend the datasets to correctly literalize ActiveSupport::Duration values.
       def self.extended(db)
-        db.extend_datasets(IntervalDatasetMethods)
+        db.instance_eval do
+          extend_datasets(IntervalDatasetMethods)
+          copy_conversion_procs([1186, 1187])
+          @schema_type_classes[:interval] = ActiveSupport::Duration
+        end
       end
 
       # Handle ActiveSupport::Duration values in bound variables.

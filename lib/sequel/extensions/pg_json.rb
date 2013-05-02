@@ -43,7 +43,7 @@
 #   DB.extension :pg_json
 #
 # If you are not using the native postgres adapter, you probably
-# also want to use the typecast_on_load plugin in the model, and
+# also want to use the pg_typecast_on_load plugin in the model, and
 # set it to typecast the json column(s) on load.
 #
 # This extension integrates with the pg_array extension.  If you plan
@@ -93,6 +93,13 @@ module Sequel
 
     # Methods enabling Database object integration with the json type.
     module JSONDatabaseMethods
+      def self.extended(db)
+        db.instance_eval do
+          copy_conversion_procs([114, 199])
+          @schema_type_classes[:json] = [JSONHash, JSONArray]
+        end
+      end
+
       # Parse the given string as json, returning either a JSONArray
       # or JSONHash instance, and raising an error if the JSON
       # parsing does not yield an array or hash.
@@ -123,16 +130,6 @@ module Sequel
         end
       end
 
-      # Make the column type detection recognize the json type.
-      def schema_column_type(db_type)
-        case db_type
-        when 'json'
-          :json
-        else
-          super
-        end
-      end
-
       private
 
       # Handle json[] types in bound variables.
@@ -140,6 +137,16 @@ module Sequel
         case a
         when JSONHash, JSONArray
           "\"#{a.to_json.gsub('"', '\\"')}\""
+        else
+          super
+        end
+      end
+
+      # Make the column type detection recognize the json type.
+      def schema_column_type(db_type)
+        case db_type
+        when 'json'
+          :json
         else
           super
         end

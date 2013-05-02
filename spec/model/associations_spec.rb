@@ -200,7 +200,7 @@ describe Sequel::Model, "many_to_one" do
     MODEL_DB.sqls.should == ["SELECT * FROM nodes WHERE (nodes.id = 234) LIMIT 1"]
   end
   
-  it "should allow association with the same name as the key if :key_alias is given" do
+  it "should allow association with the same name as the key if :key_column is given" do
     @c2.def_column_alias(:parent_id_id, :parent_id)
     @c2.many_to_one :parent_id, :key_column=>:parent_id, :class => @c2
     d = @c2.load(:id => 1, :parent_id => 234)
@@ -378,7 +378,7 @@ describe Sequel::Model, "many_to_one" do
     MODEL_DB.sqls.should == ['UPDATE nodes SET parent_id = 345 WHERE (id = 1)']
   end
 
-  it "should set cached instance variable when accessed" do
+  it "should populate cache when accessed" do
     @c2.many_to_one :parent, :class => @c2
 
     d = @c2.load(:id => 1)
@@ -390,7 +390,7 @@ describe Sequel::Model, "many_to_one" do
     d.associations[:parent].should == e
   end
 
-  it "should set cached instance variable when assigned" do
+  it "should populate cache when assigned" do
     @c2.many_to_one :parent, :class => @c2
 
     d = @c2.create(:id => 1)
@@ -402,7 +402,7 @@ describe Sequel::Model, "many_to_one" do
     MODEL_DB.sqls.should == []
   end
 
-  it "should use cached instance variable if available" do
+  it "should use cache if available" do
     @c2.many_to_one :parent, :class => @c2
 
     d = @c2.create(:id => 1, :parent_id => 234)
@@ -412,7 +412,7 @@ describe Sequel::Model, "many_to_one" do
     MODEL_DB.sqls.should == []
   end
 
-  it "should not use cached instance variable if asked to reload" do
+  it "should not use cache if asked to reload" do
     @c2.many_to_one :parent, :class => @c2
 
     d = @c2.create(:id => 1)
@@ -445,7 +445,7 @@ describe Sequel::Model, "many_to_one" do
     MODEL_DB.sqls.should == ["SELECT * FROM nodes WHERE ((nodes.id = 234) AND (name > 'M')) LIMIT 1"]
   end
   
-  it "should have the setter add to the reciprocal one_to_many cached association list if it exists" do
+  it "should have the setter add to the reciprocal one_to_many cached association array if it exists" do
     @c2.many_to_one :parent, :class => @c2
     @c2.one_to_many :children, :class => @c2, :key=>:parent_id
     @c2.dataset._fetch = []
@@ -466,7 +466,7 @@ describe Sequel::Model, "many_to_one" do
     MODEL_DB.sqls.should == []
   end
 
-  it "should have many_to_one setter deal with a one_to_one reciprocal" do
+  it "should have setter deal with a one_to_one reciprocal" do
     @c2.many_to_one :parent, :class => @c2, :key=>:parent_id
     @c2.one_to_one :child, :class => @c2, :key=>:parent_id
 
@@ -488,7 +488,7 @@ describe Sequel::Model, "many_to_one" do
     e.child.should == d
   end
 
-  it "should have the setter remove the object from the previous associated object's reciprocal one_to_many cached association list if it exists" do
+  it "should have the setter remove the object from the previous associated object's reciprocal one_to_many cached association array if it exists" do
     @c2.many_to_one :parent, :class => @c2
     @c2.one_to_many :children, :class => @c2, :key=>:parent_id
     @c2.dataset._fetch = []
@@ -583,6 +583,15 @@ describe Sequel::Model, "many_to_one" do
     p.instance_variable_get(:@x).should == c
   end
 
+  it "should have the :setter option define the _association= method" do
+    @c2.many_to_one :parent, :class => @c2, :setter=>proc{|x| @x = x}
+    p = @c2.new
+    c = @c2.load(:id=>123)
+    p.should_not_receive(:parent_id=)
+    p.parent = c
+    p.instance_variable_get(:@x).should == c
+  end
+
   it "should support (before|after)_set callbacks" do
     h = []
     @c2.many_to_one :parent, :class => @c2, :before_set=>[proc{|x,y| h << x.pk; h << (y ? -y.pk : :y)}, :blah], :after_set=>proc{h << 3}
@@ -655,28 +664,6 @@ describe Sequel::Model, "many_to_one" do
   it "should raise an error if a callback is not a proc or symbol" do
     @c2.many_to_one :parent, :class => @c2, :before_set=>Object.new
     proc{@c2.new.parent = @c2.load(:id=>1)}.should raise_error(Sequel::Error)
-  end
-
-  it "should call the remove callbacks for the previous object and the add callbacks for the new object" do
-    c = @c2.load(:id=>123)
-    d = @c2.load(:id=>321)
-    p = @c2.new
-    p.associations[:parent] = d
-    @c2.many_to_one :parent, :class => @c2, :before_set=>:bs, :after_set=>:as
-    @c2.class_eval do
-      self::Foo = []
-      def []=(a, v)
-        a == :parent_id ? (model::Foo << 5) : super
-      end
-      def bs(x)
-        model::Foo << x.pk
-      end
-      def as(x)
-        model::Foo << x.pk * 2
-      end
-    end
-    p.parent = c
-    @c2::Foo.should == [123, 5, 246]
   end
 end
 
@@ -918,7 +905,7 @@ describe Sequel::Model, "one_to_one" do
       "UPDATE nodes SET node_id = 1 WHERE (id = 3)"] 
   end
 
-  it "should set cached instance variable when accessed" do
+  it "should populate cache when accessed" do
     @c2.one_to_one :parent, :class => @c2
 
     d = @c2.load(:id => 1)
@@ -931,7 +918,7 @@ describe Sequel::Model, "one_to_one" do
     d.associations[:parent].should == e
   end
 
-  it "should set cached instance variable when assigned" do
+  it "should populate cache when assigned" do
     @c2.one_to_one :parent, :class => @c2
 
     d = @c2.load(:id => 1)
@@ -943,7 +930,7 @@ describe Sequel::Model, "one_to_one" do
     e.should == f
   end
 
-  it "should use cached instance variable if available" do
+  it "should use cache if available" do
     @c2.one_to_one :parent, :class => @c2
     d = @c2.load(:id => 1, :parent_id => 234)
     d.associations[:parent] = 42
@@ -951,7 +938,7 @@ describe Sequel::Model, "one_to_one" do
     MODEL_DB.sqls.should == []
   end
 
-  it "should not use cached instance variable if asked to reload" do
+  it "should not use cache if asked to reload" do
     @c2.one_to_one :parent, :class => @c2
     d = @c2.load(:id => 1)
     d.associations[:parent] = [42]
@@ -974,7 +961,7 @@ describe Sequel::Model, "one_to_one" do
     MODEL_DB.sqls.should == ["UPDATE nodes SET parent_id = NULL WHERE (parent_id = 1)"]
   end
 
-  it "should have the setter remove the object from the previous associated object's reciprocal many_to_one cached association list if it exists" do
+  it "should have the setter remove the object from the previous associated object's reciprocal many_to_one cached association array if it exists" do
     @c2.one_to_one :parent, :class => @c2, :key=>:parent_id
     @c2.many_to_one :child, :class => @c2, :key=>:parent_id
     @c2.dataset._fetch = []
@@ -1029,6 +1016,15 @@ describe Sequel::Model, "one_to_one" do
     def p._parent=(x)
       @x = x
     end
+    p.should_not_receive(:parent_id=)
+    p.parent = c
+    p.instance_variable_get(:@x).should == c
+  end
+
+  it "should have a :setter option define the _association= method" do
+    @c2.one_to_one :parent, :class => @c2, :setter=>proc{|x| @x = x}
+    c = @c2.new
+    p = @c2.load(:id=>123)
     p.should_not_receive(:parent_id=)
     p.parent = c
     p.instance_variable_get(:@x).should == c
@@ -1093,29 +1089,6 @@ describe Sequel::Model, "one_to_one" do
     proc{@c2.new.parent = @c2.load(:id=>1)}.should raise_error(Sequel::Error)
   end
 
-  it "should call the set callbacks" do
-    c = @c2.load(:id=>123)
-    d = @c2.load(:id=>321)
-    p = @c2.load(:id=>32)
-    p.associations[:parent] = [d]
-    h = []
-    @c2.one_to_one :parent, :class => @c2, :before_set=>:bs, :after_set=>:as
-    @c2.class_eval do
-      self::Foo = h
-      def []=(a, v)
-        a == :node_id ? (model::Foo << 5) : super
-      end
-      def bs(x)
-        model::Foo << x.pk
-      end
-      def as(x)
-        model::Foo << x.pk * 2
-      end
-    end
-    p.parent = c
-    h.should == [123, 5, 246]
-  end
-  
   it "should work_correctly when used with associate" do
     @c2.associate :one_to_one, :parent, :class => @c2
     @c2.load(:id => 567).parent.should == @c2.load({})
@@ -1419,21 +1392,21 @@ describe Sequel::Model, "one_to_many" do
     @c2.new(:id => 1234).attributes_dataset.sql.should == "SELECT * FROM attributes WHERE (attributes.node_id = 1234) ORDER BY kind1, kind2"
   end
   
-  it "should return array with all members of the association" do
+  it "should have a dataset method for the associated object dataset" do
     @c2.one_to_many :attributes, :class => @c1
     @c2.new(:id => 1234).attributes_dataset.sql.should == 'SELECT * FROM attributes WHERE (attributes.node_id = 1234)'
   end
   
   it "should accept a block" do
     @c2.one_to_many :attributes, :class => @c1 do |ds|
-      ds.filter(:xxx => @xxx)
+      ds.filter(:xxx => nil)
     end
     @c2.new(:id => 1234).attributes_dataset.sql.should == 'SELECT * FROM attributes WHERE ((attributes.node_id = 1234) AND (xxx IS NULL))'
   end
   
   it "should support :order option with block" do
     @c2.one_to_many :attributes, :class => @c1, :order => :kind do |ds|
-      ds.filter(:xxx => @xxx)
+      ds.filter(:xxx => nil)
     end
     @c2.new(:id => 1234).attributes_dataset.sql.should == 'SELECT * FROM attributes WHERE ((attributes.node_id = 1234) AND (xxx IS NULL)) ORDER BY kind'
   end
@@ -1467,7 +1440,7 @@ describe Sequel::Model, "one_to_many" do
     @c2.new(:id => 1234).attributes_dataset.opts[:eager].should == {:attributes=>nil}
   end
   
-  it "should set cached instance variable when accessed" do
+  it "should populate cache when accessed" do
     @c2.one_to_many :attributes, :class => @c1
     n = @c2.new(:id => 1234)
     n.associations.include?(:attributes).should == false
@@ -1476,7 +1449,7 @@ describe Sequel::Model, "one_to_many" do
     MODEL_DB.sqls.should == ['SELECT * FROM attributes WHERE (attributes.node_id = 1234)']
   end
 
-  it "should use cached instance variable if available" do
+  it "should use cache if available" do
     @c2.one_to_many :attributes, :class => @c1
     n = @c2.new(:id => 1234)
     n.associations[:attributes] = 42
@@ -1484,7 +1457,7 @@ describe Sequel::Model, "one_to_many" do
     MODEL_DB.sqls.should == []
   end
 
-  it "should not use cached instance variable if asked to reload" do
+  it "should not use cache if asked to reload" do
     @c2.one_to_many :attributes, :class => @c1
     n = @c2.new(:id => 1234)
     n.associations[:attributes] = 42
@@ -1492,7 +1465,7 @@ describe Sequel::Model, "one_to_many" do
     MODEL_DB.sqls.should == ['SELECT * FROM attributes WHERE (attributes.node_id = 1234)']
   end
 
-  it "should add item to cached instance variable if it exists when calling add_" do
+  it "should add item to cache if it exists when calling add_" do
     @c2.one_to_many :attributes, :class => @c1
     n = @c2.new(:id => 1234)
     att = @c1.load(:id => 345)
@@ -1502,7 +1475,7 @@ describe Sequel::Model, "one_to_many" do
     a.should == [att]
   end
 
-  it "should set object to item's reciprocal cached association variable when calling add_" do
+  it "should set object to item's reciprocal cache when calling add_" do
     @c2.one_to_many :attributes, :class => @c1
     @c1.many_to_one :node, :class => @c2
 
@@ -1512,7 +1485,7 @@ describe Sequel::Model, "one_to_many" do
     att.node.should == n
   end
 
-  it "should remove item from cached instance variable if it exists when calling remove_" do
+  it "should remove item from cache if it exists when calling remove_" do
     @c2.one_to_many :attributes, :class => @c1
 
     n = @c2.load(:id => 1234)
@@ -1523,7 +1496,7 @@ describe Sequel::Model, "one_to_many" do
     a.should == []
   end
 
-  it "should remove item's reciprocal cached association variable when calling remove_" do
+  it "should remove item's reciprocal cache calling remove_" do
     @c2.one_to_many :attributes, :class => @c1
     @c1.many_to_one :node, :class => @c2
 
@@ -1561,7 +1534,7 @@ describe Sequel::Model, "one_to_many" do
     im2.should_not(include('remove_all_attributes'))
   end
 
-  it "should populate the reciprocal many_to_one instance variable when loading the one_to_many association" do
+  it "should populate the reciprocal many_to_one cache when loading the one_to_many association" do
     @c2.one_to_many :attributes, :class => @c1, :key => :node_id
     @c1.many_to_one :node, :class => @c2, :key => :node_id
     
@@ -1573,7 +1546,7 @@ describe Sequel::Model, "one_to_many" do
     MODEL_DB.sqls.should == []
   end
   
-  it "should use an explicit reciprocal instance variable if given" do
+  it "should use an explicit :reciprocal option if given" do
     @c2.one_to_many :attributes, :class => @c1, :key => :node_id, :reciprocal=>:wxyz
     
     n = @c2.new(:id => 1234)
@@ -1584,7 +1557,7 @@ describe Sequel::Model, "one_to_many" do
     MODEL_DB.sqls.should == []
   end
   
-  it "should have an remove_all_ method that removes all associations" do
+  it "should have an remove_all_ method that removes all associated objects" do
     @c2.one_to_many :attributes, :class => @c1
     @c2.new(:id => 1234).remove_all_attributes
     MODEL_DB.sqls.should == ['UPDATE attributes SET node_id = NULL WHERE (node_id = 1234)']
@@ -1612,14 +1585,14 @@ describe Sequel::Model, "one_to_many" do
     sqls.should == []
   end
 
-  it "remove_all should set the cached instance variable to []" do
+  it "remove_all should set the cache to []" do
     @c2.one_to_many :attributes, :class => @c1
     node = @c2.new(:id => 1234)
     node.remove_all_attributes
     node.associations[:attributes].should == []
   end
 
-  it "remove_all should return the array of previously associated items if the cached instance variable exists" do
+  it "remove_all should return the array of previously associated items if the cache is populated" do
     @c2.one_to_many :attributes, :class => @c1
     attrib = @c1.new(:id=>3)
     node = @c2.new(:id => 1234)
@@ -1630,12 +1603,12 @@ describe Sequel::Model, "one_to_many" do
     node.remove_all_attributes.should == [attrib]
   end
 
-  it "remove_all should return nil if the cached instance variable does not exist" do
+  it "remove_all should return nil if the cache is not populated" do
     @c2.one_to_many :attributes, :class => @c1
     @c2.new(:id => 1234).remove_all_attributes.should == nil
   end
 
-  it "remove_all should remove the current item from all reciprocal instance varaibles if it cached instance variable exists" do
+  it "remove_all should remove the current item from all reciprocal association caches if they are populated" do
     @c2.one_to_many :attributes, :class => @c1
     @c1.many_to_one :node, :class => @c2
     @c2.dataset._fetch = []
@@ -1663,6 +1636,15 @@ describe Sequel::Model, "one_to_many" do
     p.instance_variable_get(:@x).should == c
   end
 
+  it "should support an :adder option for defining the _add_ method" do
+    @c2.one_to_many :attributes, :class => @c1, :adder=>proc{|x| @x = x}
+    p = @c2.load(:id=>10)
+    c = @c1.load(:id=>123)
+    c.should_not_receive(:node_id=)
+    p.add_attribute(c)
+    p.instance_variable_get(:@x).should == c
+  end
+
   it "should allow additional arguments given to the add_ method and pass them onwards to the _add_ method" do
     @c2.one_to_many :attributes, :class => @c1
     p = @c2.load(:id=>10)
@@ -1685,6 +1667,15 @@ describe Sequel::Model, "one_to_many" do
     def p._remove_attribute(x)
       @x = x
     end
+    c.should_not_receive(:node_id=)
+    p.remove_attribute(c)
+    p.instance_variable_get(:@x).should == c
+  end
+
+  it "should support a :remover option for defining the _remove_ method" do
+    @c2.one_to_many :attributes, :class => @c1, :remover=>proc{|x| @x = x}
+    p = @c2.load(:id=>10)
+    c = @c1.load(:id=>123)
     c.should_not_receive(:node_id=)
     p.remove_attribute(c)
     p.instance_variable_get(:@x).should == c
@@ -1723,6 +1714,13 @@ describe Sequel::Model, "one_to_many" do
     def p._remove_all_attributes
       @x = :foo
     end
+    p.remove_all_attributes
+    p.instance_variable_get(:@x).should == :foo
+  end
+
+  it "should support a :clearer option for defining the _remove_all_ method" do
+    @c2.one_to_many :attributes, :class => @c1, :clearer=>proc{@x = :foo}
+    p = @c2.load(:id=>10)
     p.remove_all_attributes
     p.instance_variable_get(:@x).should == :foo
   end
@@ -1965,7 +1963,6 @@ describe Sequel::Model, "many_to_many" do
   end
 
   it "should support a :dataset option that accepts the reflection as an argument" do
-    c1 = @c1
     @c2.many_to_many :attributes, :class => @c1, :dataset=>lambda{|opts| opts.associated_dataset.join_table(:natural, :an).filter(:an__nodeid=>pk)}, :order=> :a, :limit=>10, :select=>nil do |ds|
       ds.filter(:xxx => @xxx)
     end
@@ -2220,7 +2217,7 @@ describe Sequel::Model, "many_to_many" do
     MODEL_DB.sqls.should == ['SELECT attributes.* FROM attributes INNER JOIN attributes_nodes ON ((attributes_nodes.attribute_id = attributes.id) AND (attributes_nodes.node_id = 1234))']
   end
 
-  it "should set cached instance variable when accessed" do
+  it "should populate cache when accessed" do
     @c2.many_to_many :attributes, :class => @c1
 
     n = @c2.new(:id => 1234)
@@ -2229,7 +2226,7 @@ describe Sequel::Model, "many_to_many" do
     atts.should == n.associations[:attributes]
   end
 
-  it "should use cached instance variable if available" do
+  it "should use cache if available" do
     @c2.many_to_many :attributes, :class => @c1
 
     n = @c2.new(:id => 1234)
@@ -2238,7 +2235,7 @@ describe Sequel::Model, "many_to_many" do
     MODEL_DB.sqls.should == []
   end
 
-  it "should not use cached instance variable if asked to reload" do
+  it "should not use cache if asked to reload" do
     @c2.many_to_many :attributes, :class => @c1
 
     n = @c2.new(:id => 1234)
@@ -2247,7 +2244,7 @@ describe Sequel::Model, "many_to_many" do
     MODEL_DB.sqls.should == ["SELECT attributes.* FROM attributes INNER JOIN attributes_nodes ON ((attributes_nodes.attribute_id = attributes.id) AND (attributes_nodes.node_id = 1234))"]
   end
 
-  it "should add item to cached instance variable if it exists when calling add_" do
+  it "should add item to cache if it exists when calling add_" do
     @c2.many_to_many :attributes, :class => @c1
 
     n = @c2.new(:id => 1234)
@@ -2258,7 +2255,7 @@ describe Sequel::Model, "many_to_many" do
     a.should == [att]
   end
 
-  it "should add item to reciprocal cached instance variable if it exists when calling add_" do
+  it "should add item to reciprocal's cache if it exists when calling add_" do
     @c2.many_to_many :attributes, :class => @c1
     @c1.many_to_many :nodes, :class => @c2
 
@@ -2269,7 +2266,7 @@ describe Sequel::Model, "many_to_many" do
     att.nodes.should == [n]
   end
 
-  it "should remove item from cached instance variable if it exists when calling remove_" do
+  it "should remove item from cache if it exists when calling remove_" do
     @c2.many_to_many :attributes, :class => @c1
 
     n = @c2.new(:id => 1234)
@@ -2280,7 +2277,7 @@ describe Sequel::Model, "many_to_many" do
     a.should == []
   end
 
-  it "should remove item from reciprocal cached instance variable if it exists when calling remove_" do
+  it "should remove item from reciprocal's if it exists when calling remove_" do
     @c2.many_to_many :attributes, :class => @c1
     @c1.many_to_many :nodes, :class => @c2
 
@@ -2398,6 +2395,15 @@ describe Sequel::Model, "many_to_many" do
     MODEL_DB.sqls.should == []
   end
 
+  it "should support an :adder option for defining the _add_ method" do
+    @c2.many_to_many :attributes, :class => @c1, :adder=>proc{|x| @x = x}
+    p = @c2.load(:id=>10)
+    c = @c1.load(:id=>123)
+    p.add_attribute(c)
+    p.instance_variable_get(:@x).should == c
+    MODEL_DB.sqls.should == []
+  end
+
   it "should allow additional arguments given to the add_ method and pass them onwards to the _add_ method" do
     @c2.many_to_many :attributes, :class => @c1
     p = @c2.load(:id=>10)
@@ -2424,6 +2430,15 @@ describe Sequel::Model, "many_to_many" do
     MODEL_DB.sqls.should == []
   end
 
+  it "should support a :remover option for defining the _remove_ method" do
+    @c2.many_to_many :attributes, :class => @c1, :remover=>proc{|x| @x = x}
+    p = @c2.load(:id=>10)
+    c = @c1.load(:id=>123)
+    p.remove_attribute(c)
+    p.instance_variable_get(:@x).should == c
+    MODEL_DB.sqls.should == []
+  end
+
   it "should allow additional arguments given to the remove_ method and pass them onwards to the _remove_ method" do
     @c2.many_to_many :attributes, :class => @c1
     p = @c2.load(:id=>10)
@@ -2440,7 +2455,6 @@ describe Sequel::Model, "many_to_many" do
   it "should allow additional arguments given to the remove_all_ method and pass them onwards to the _remove_all_ method" do
     @c2.many_to_many :attributes, :class => @c1
     p = @c2.load(:id=>10)
-    c = @c1.load(:id=>123)
     def p._remove_all_attributes(*y)
       @y = y
     end
@@ -2455,6 +2469,14 @@ describe Sequel::Model, "many_to_many" do
     def p._remove_all_attributes
       @x = :foo
     end
+    p.remove_all_attributes
+    p.instance_variable_get(:@x).should == :foo
+    MODEL_DB.sqls.should == []
+  end
+
+  it "should support a :clearer option for defining the _remove_all_ method" do
+    @c2.many_to_many :attributes, :class => @c1, :clearer=>proc{@x = :foo}
+    p = @c2.load(:id=>10)
     p.remove_all_attributes
     p.instance_variable_get(:@x).should == :foo
     MODEL_DB.sqls.should == []

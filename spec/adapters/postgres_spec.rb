@@ -116,6 +116,25 @@ describe "A PostgreSQL database" do
   end
 end
 
+describe "A PostgreSQL database with domain types" do
+  before(:all) do
+    @db = POSTGRES_DB
+    @db << "DROP DOMAIN IF EXISTS positive_number CASCADE"
+    @db << "CREATE DOMAIN positive_number AS numeric(10,2) CHECK (VALUE > 0)"
+    @db.create_table!(:testfk){positive_number :id, :primary_key=>true}
+  end
+  after(:all) do
+    @db.drop_table?(:testfk)
+    @db << "DROP DOMAIN positive_number"
+  end
+
+  specify "should correctly parse the schema" do
+    sch = @db.schema(:testfk, :reload=>true)
+    sch.first.last.delete(:domain_oid).should be_a_kind_of(Integer)
+    sch.should == [[:id, {:type=>:decimal, :ruby_default=>nil, :db_type=>"numeric(10,2)", :default=>nil, :oid=>1700, :primary_key=>true, :allow_null=>false, :db_domain_type=>'positive_number'}]]
+  end
+end
+
 describe "A PostgreSQL dataset" do
   before(:all) do
     @db = POSTGRES_DB
@@ -482,6 +501,23 @@ describe "A PostgreSQL dataset with a timestamp field" do
       @db[:test3].get(:time).should == 'infinity'
       @db.convert_infinite_timestamps = :float
       @db[:test3].get(:time).should == 1.0/0.0
+      @db.convert_infinite_timestamps = 'nil'
+      @db[:test3].get(:time).should == nil
+      @db.convert_infinite_timestamps = 'string'
+      @db[:test3].get(:time).should == 'infinity'
+      @db.convert_infinite_timestamps = 'float'
+      @db[:test3].get(:time).should == 1.0/0.0
+      @db.convert_infinite_timestamps = 't'
+      @db[:test3].get(:time).should == 1.0/0.0
+      if ((Time.parse('infinity'); nil) rescue true)
+        # Skip for loose time parsing (e.g. old rbx)
+        @db.convert_infinite_timestamps = 'f'
+        proc{@db[:test3].get(:time)}.should raise_error
+        @db.convert_infinite_timestamps = nil
+        proc{@db[:test3].get(:time)}.should raise_error
+        @db.convert_infinite_timestamps = false
+        proc{@db[:test3].get(:time)}.should raise_error
+      end
 
       @d.update(:time=>Sequel.cast('-infinity', DateTime))
       @db.convert_infinite_timestamps = :nil
@@ -1217,7 +1253,7 @@ describe "Postgres::Database functions, languages, schemas, and triggers" do
     args = ['tf', 'SELECT 1', {:returns=>:integer}]
     @d.send(:create_function_sql, *args).should =~ /\A\s*CREATE FUNCTION tf\(\)\s+RETURNS integer\s+LANGUAGE SQL\s+AS 'SELECT 1'\s*\z/
     @d.create_function(*args)
-    rows = @d['SELECT tf()'].all.should == [{:tf=>1}]
+    @d['SELECT tf()'].all.should == [{:tf=>1}]
     @d.send(:drop_function_sql, 'tf').should == 'DROP FUNCTION tf()'
     @d.drop_function('tf')
     proc{@d['SELECT tf()'].all}.should raise_error(Sequel::DatabaseError)
@@ -1229,7 +1265,7 @@ describe "Postgres::Database functions, languages, schemas, and triggers" do
     @d.create_function(*args)
     # Make sure replace works
     @d.create_function(*args)
-    rows = @d['SELECT tf(1, 2)'].all.should == [{:tf=>3}]
+    @d['SELECT tf(1, 2)'].all.should == [{:tf=>3}]
     args = ['tf', {:if_exists=>true, :cascade=>true, :args=>[[:integer, :a], :integer]}]
     @d.send(:drop_function_sql,*args).should == 'DROP FUNCTION IF EXISTS tf(a integer, integer) CASCADE'
     @d.drop_function(*args)
@@ -1323,6 +1359,7 @@ if POSTGRES_DB.adapter_scheme == :postgres
     before do
       @db = POSTGRES_DB
       Sequel::Postgres::PG_NAMED_TYPES[:interval] = lambda{|v| v.reverse}
+      @db.extension :pg_array
       @db.reset_conversion_procs
     end
     after do
@@ -1335,6 +1372,12 @@ if POSTGRES_DB.adapter_scheme == :postgres
       @db.create_table!(:foo){interval :bar}
       @db[:foo].insert(Sequel.cast('21 days', :interval))
       @db[:foo].get(:bar).should == 'syad 12'
+    end
+
+    specify "should handle array types of named types" do
+      @db.create_table!(:foo){column :bar, 'interval[]'}
+      @db[:foo].insert(Sequel.pg_array(['21 days'], :interval))
+      @db[:foo].get(:bar).should == ['syad 12']
     end
   end
 end
@@ -1792,6 +1835,42 @@ describe 'PostgreSQL array handling' do
     end
   end
 
+  specify 'insert and retrieve custom array types' do
+    int2vector = Class.new do
+      attr_reader :array
+      def initialize(array)
+        @array = array
+      end
+      def sql_literal_append(ds, sql)
+        sql << "'#{array.join(' ')}'"
+      end
+      def ==(other)
+        if other.is_a?(self.class)
+          array == other.array
+        else
+          super
+        end
+      end
+    end
+    @db.register_array_type(:int2vector){|s| int2vector.new(s.split.map{|i| i.to_i})}
+    @db.create_table!(:items) do
+      column :b, 'int2vector[]'
+    end
+    @tp.call.should == [:int2vector_array]
+    int2v = int2vector.new([1, 2])
+    @ds.insert(Sequel.pg_array([int2v], :int2vector))
+    @ds.count.should == 1
+    rs = @ds.all
+    if @native
+      rs.should == [{:b=>[int2v]}]
+      rs.first.values.each{|v| v.should_not be_a_kind_of(Array)}
+      rs.first.values.each{|v| v.to_a.should be_a_kind_of(Array)}
+      @ds.delete
+      @ds.insert(rs.first)
+      @ds.all.should == rs
+    end
+  end unless POSTGRES_DB.adapter_scheme == :jdbc
+
   specify 'use arrays in bound variables' do
     @db.create_table!(:items) do
       column :i, 'int4[]'
@@ -1929,7 +2008,7 @@ end
 describe 'PostgreSQL hstore handling' do
   before(:all) do
     @db = POSTGRES_DB
-    @db.extension :pg_hstore
+    @db.extension :pg_array, :pg_hstore
     @ds = @db[:items]
     @h = {'a'=>'b', 'c'=>nil, 'd'=>'NULL', 'e'=>'\\\\" \\\' ,=>'}
     @native = POSTGRES_DB.adapter_scheme == :postgres
@@ -1947,6 +2026,24 @@ describe 'PostgreSQL hstore handling' do
     if @native
       rs = @ds.all
       v = rs.first[:h]
+      v.should_not be_a_kind_of(Hash)
+      v.to_hash.should be_a_kind_of(Hash)
+      v.to_hash.should == @h
+      @ds.delete
+      @ds.insert(rs.first)
+      @ds.all.should == rs
+    end
+  end
+
+  specify 'insert and retrieve hstore[] values' do
+    @db.create_table!(:items) do
+      column :h, 'hstore[]'
+    end
+    @ds.insert(Sequel.pg_array([Sequel.hstore(@h)], :hstore))
+    @ds.count.should == 1
+    if @native
+      rs = @ds.all
+      v = rs.first[:h].first
       v.should_not be_a_kind_of(Hash)
       v.to_hash.should be_a_kind_of(Hash)
       v.to_hash.should == @h
@@ -2136,6 +2233,7 @@ describe 'PostgreSQL hstore handling' do
     @ds.from(:items___i).select(Sequel.hstore('t'=>'s').op.record_set(:i).as(:r)).from_self(:alias=>:s).select(Sequel.lit('(r).*')).from_self.select_map(:t).should == ['s']
 
     @ds.from(Sequel.hstore('t'=>'s', 'a'=>'b').op.skeys.as(:s)).select_order_map(:s).should == %w'a t'
+    @ds.from((Sequel.hstore('t'=>'s', 'a'=>'b').op - 'a').skeys.as(:s)).select_order_map(:s).should == %w't'
 
     @ds.get(h1.slice(Sequel.pg_array(%w'a c')).keys.pg_array.length).should == 2
     @ds.get(h1.slice(Sequel.pg_array(%w'd c')).keys.pg_array.length).should == 1
@@ -2300,7 +2398,7 @@ describe 'PostgreSQL inet/cidr types' do
       @ds.count.should == 1
       if @native
         rs = @ds.all
-        v = rs.first[:j]
+        rs.first[:j]
         rs.first[:i].should == @ipv6
         rs.first[:c].should == @ipv6nm
         rs.first[:i].should be_a_kind_of(IPAddr)
@@ -2472,7 +2570,7 @@ describe 'PostgreSQL range types' do
       c.plugin :pg_typecast_on_load, :i4, :i8, :n, :d, :t, :tz unless @native
       v = c.create(@ra).values
       v.delete(:id)
-      v.each{|k,v| v.should == @ra[k].to_a}
+      v.each{|k,v1| v1.should == @ra[k].to_a}
     end
   end
 
@@ -2500,15 +2598,19 @@ describe 'PostgreSQL range types' do
     @db.get(Sequel.pg_range(1..5, :int4range).op.right_of(-1..0)).should be_true
     @db.get(Sequel.pg_range(1..5, :int4range).op.right_of(-1..3)).should be_false
 
-    @db.get(Sequel.pg_range(1..5, :int4range).op.starts_before(6..10)).should be_true
-    @db.get(Sequel.pg_range(1..5, :int4range).op.starts_before(5..10)).should be_true
-    @db.get(Sequel.pg_range(1..5, :int4range).op.starts_before(-1..0)).should be_false
-    @db.get(Sequel.pg_range(1..5, :int4range).op.starts_before(-1..3)).should be_false
+    @db.get(Sequel.pg_range(1..5, :int4range).op.ends_before(6..10)).should be_true
+    @db.get(Sequel.pg_range(1..5, :int4range).op.ends_before(5..10)).should be_true
+    @db.get(Sequel.pg_range(1..5, :int4range).op.ends_before(-1..0)).should be_false
+    @db.get(Sequel.pg_range(1..5, :int4range).op.ends_before(-1..3)).should be_false
+    @db.get(Sequel.pg_range(1..5, :int4range).op.ends_before(-1..7)).should be_true
 
-    @db.get(Sequel.pg_range(1..5, :int4range).op.ends_after(6..10)).should be_false
-    @db.get(Sequel.pg_range(1..5, :int4range).op.ends_after(5..10)).should be_false
-    @db.get(Sequel.pg_range(1..5, :int4range).op.ends_after(-1..0)).should be_true
-    @db.get(Sequel.pg_range(1..5, :int4range).op.ends_after(-1..3)).should be_true
+    @db.get(Sequel.pg_range(1..5, :int4range).op.starts_after(6..10)).should be_false
+    @db.get(Sequel.pg_range(1..5, :int4range).op.starts_after(5..10)).should be_false
+    @db.get(Sequel.pg_range(1..5, :int4range).op.starts_after(3..10)).should be_false
+    @db.get(Sequel.pg_range(1..5, :int4range).op.starts_after(-1..10)).should be_true
+    @db.get(Sequel.pg_range(1..5, :int4range).op.starts_after(-1..0)).should be_true
+    @db.get(Sequel.pg_range(1..5, :int4range).op.starts_after(-1..3)).should be_true
+    @db.get(Sequel.pg_range(1..5, :int4range).op.starts_after(-5..-1)).should be_true
 
     @db.get(Sequel.pg_range(1..5, :int4range).op.adjacent_to(6..10)).should be_true
     @db.get(Sequel.pg_range(1...5, :int4range).op.adjacent_to(6..10)).should be_false
@@ -2637,7 +2739,7 @@ describe 'PostgreSQL interval types' do
     v = c.create(:i=>'1 year 2 mons 25 days 05:06:07').i
     v.is_a?(ActiveSupport::Duration).should be_true
     v.should == ActiveSupport::Duration.new(31557600 + 2*86400*30 + 3*86400*7 + 4*86400 + 5*3600 + 6*60 + 7, [[:years, 1], [:months, 2], [:days, 25], [:seconds, 18367]])
-    v.parts.sort_by{|k,v| k.to_s}.should == [[:years, 1], [:months, 2], [:days, 25], [:seconds, 18367]].sort_by{|k,v| k.to_s}
+    v.parts.sort_by{|k,_| k.to_s}.should == [[:years, 1], [:months, 2], [:days, 25], [:seconds, 18367]].sort_by{|k,_| k.to_s}
   end
 end if (begin require 'active_support/duration'; require 'active_support/inflector'; require 'active_support/core_ext/string/inflections'; true; rescue LoadError; false end)
 
@@ -2697,6 +2799,21 @@ describe 'PostgreSQL row-valued/composite types' do
     end
   end
 
+  specify 'insert and retrieve row types containing domains' do
+    begin
+      @db << "DROP DOMAIN IF EXISTS positive_integer CASCADE"
+      @db << "CREATE DOMAIN positive_integer AS integer CHECK (VALUE > 0)"
+      @db.create_table!(:domain_check) do
+        positive_integer :id
+      end
+      @db.register_row_type(:domain_check)
+      @db.get(@db.row_type(:domain_check, [1])).should == {:id=>1}
+    ensure
+      @db.drop_table(:domain_check)
+      @db << "DROP DOMAIN positive_integer"
+    end
+  end if POSTGRES_DB.adapter_scheme == :postgres
+
   specify 'insert and retrieve arrays of row types' do
     @ds = @db[:company]
     @ds.insert(:id=>1, :employees=>Sequel.pg_array([@db.row_type(:person, [1, Sequel.pg_row(['123 Sesame St', 'Somewhere', '12345'])])]))
@@ -2733,7 +2850,6 @@ describe 'PostgreSQL row-valued/composite types' do
     @ds.get(:company).should == {:id=>1, :employees=>[{:id=>1, :address=>{:street=>'123 Sesame St', :city=>'Somewhere', :zip=>'12345'}}]}
     @ds.filter(:employees=>Sequel.cast(:$employees, 'person[]')).call(:first, :employees=>Sequel.pg_array([@db.row_type(:person, [1, Sequel.pg_row(['123 Sesame St', 'Somewhere', '12345'])])]))[:id].should == 1
     @ds.filter(:employees=>Sequel.cast(:$employees, 'person[]')).call(:first, :employees=>Sequel.pg_array([@db.row_type(:person, [1, Sequel.pg_row(['123 Sesame St', 'Somewhere', '12356'])])])).should == nil
-
 
     @ds.delete
     @ds.call(:insert, {:employees=>Sequel.pg_array([@db.row_type(:person, [1, Sequel.pg_row([nil, nil, nil])])])}, {:employees=>:$employees, :id=>1})

@@ -66,6 +66,18 @@
 #
 #   DB[:table].insert(:address=>DB.row_type(:address, :street=>'123 Sesame St.', :city=>'Some City', :zip=>'12345'))
 #
+# Note that registering row types without providing an explicit :converter option
+# creates anonymous classes.  This results in ruby being unable to Marshal such
+# objects.  You can work around this by assigning the anonymous class to a constant.
+# To get a list of such anonymous classes, you can use the following code:
+#
+#   DB.conversion_procs.select{|k,v| v.is_a?(Sequel::Postgres::PGRow::Parser) && \
+#     v.converter && (v.converter.name.nil? || v.converter.name == '') }.map{|k,v| v}
+# 
+# If you are not using the native postgres adapter, you probably
+# also want to use the pg_typecast_on_load plugin in the model, and
+# set it to typecast the composite type column(s) on load.
+#
 # This extension requires both the strscan and delegate libraries.
 
 require 'delegate'
@@ -98,7 +110,7 @@ module Sequel
         # This is done so that instances of this subclass are
         # automatically casted to the database type when literalizing.
         def self.subclass(db_type)
-          sc = Class.new(self) do
+          Class.new(self) do
             @db_type = db_type
           end
         end
@@ -146,7 +158,7 @@ module Sequel
         # Create a new subclass of this class with the given database
         # type and columns.
         def self.subclass(db_type, columns)
-          sc = Class.new(self) do
+          Class.new(self) do
             @db_type = db_type
             @columns = columns
           end
@@ -195,6 +207,8 @@ module Sequel
           end
         end
       end
+
+      ROW_TYPE_CLASSES = [HashRow, ArrayRow]
 
       # This parser-like class splits the PostgreSQL
       # row-valued/composite type output string format
@@ -377,6 +391,7 @@ module Sequel
             @row_types = {}
             @row_schema_types = {}
             extend(@row_type_method_module = Module.new)
+            copy_conversion_procs([2249, 2287])
           end
         end
 
@@ -431,11 +446,12 @@ module Sequel
 
           # Get column names and oids for each of the members of the composite type.
           res = from(:pg_attribute).
+            join(:pg_type, :oid=>:atttypid).
             where(:attrelid=>rel_oid).
             where{attnum > 0}.
             exclude(:attisdropped).
             order(:attnum).
-            select_map([:attname, :atttypid])
+            select_map([:attname, Sequel.case({0=>:atttypid}, :pg_type__typbasetype, :pg_type__typbasetype).as(:atttypid)])
           if res.empty?
             raise Error, "no columns for row type #{db_type.inspect} in database"
           end
@@ -471,6 +487,7 @@ module Sequel
 
           @row_types[db_type] = opts.merge(:parser=>parser)
           @row_schema_types[schema_type_string] = schema_type_symbol 
+          @schema_type_classes[schema_type_symbol] = ROW_TYPE_CLASSES
           @row_type_method_module.class_eval do
             meth = :"typecast_value_#{schema_type_symbol}"
             define_method(meth) do |v|
@@ -523,15 +540,6 @@ module Sequel
           end
         end
 
-        # Make the column type detection handle registered row types.
-        def schema_column_type(db_type)
-          if type = @row_schema_types[db_type]
-            type
-          else
-            super
-          end
-        end
-
         private
 
         # Format composite types used in bound variable arrays.
@@ -542,6 +550,15 @@ module Sequel
           when HashRow
             arg.check_columns!
             "\"(#{arg.values_at(*arg.columns).map{|v| bound_variable_array(v) if v}.join(COMMA).gsub(ESCAPE_RE, ESCAPE_REPLACEMENT)})\""
+          else
+            super
+          end
+        end
+
+        # Make the column type detection handle registered row types.
+        def schema_column_type(db_type)
+          if type = @row_schema_types[db_type]
+            type
           else
             super
           end

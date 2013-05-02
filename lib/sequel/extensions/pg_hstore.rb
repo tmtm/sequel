@@ -76,7 +76,7 @@
 #   DB.extension :pg_hstore
 #
 # If you are not using the native postgres adapter, you probably
-# also want to use the typecast_on_load plugin in the model, and
+# also want to use the pg_typecast_on_load plugin in the model, and
 # set it to typecast the hstore column(s) on load.
 #
 # This extension requires the delegate and strscan libraries.
@@ -136,6 +136,13 @@ module Sequel
       end
 
       module DatabaseMethods
+        def self.extended(db)
+          db.instance_eval do
+            add_named_conversion_procs(conversion_procs, :hstore=>PG_NAMED_TYPES[:hstore])
+            @schema_type_classes[:hstore] = HStore
+          end
+        end
+
         # Handle hstores in bound variables
         def bound_variable_arg(arg, conn)
           case arg

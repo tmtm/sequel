@@ -247,6 +247,22 @@ describe "Sequel::Plugins::ValidationHelpers" do
     @m.errors.full_messages.should == ['value is not a valid integer']
   end
 
+  specify "should support validates_schema_types" do
+    @c.set_validations{validates_schema_types}
+    @m.value = 123
+    @m.should be_valid
+    @m.value = '123'
+    @m.should be_valid
+    @m.meta_def(:db_schema){{:value=>{:type=>:integer}}}
+    @m.should_not be_valid
+    @m.errors.full_messages.should == ['value is not a valid integer']
+
+    @c.set_validations{validates_schema_types(:value)}
+    @m.meta_def(:db_schema){{:value=>{:type=>:integer}}}
+    @m.should_not be_valid
+    @m.errors.full_messages.should == ['value is not a valid integer']
+  end
+
   specify "should support validates_numeric" do
     @c.set_validations{validates_numeric(:value)}
     @m.value = 'blah'
@@ -279,29 +295,57 @@ describe "Sequel::Plugins::ValidationHelpers" do
     @m.should be_valid
     @m.value = '123'
     @m.should_not be_valid
-    @m.errors.full_messages.should == ['value is not a Integer']
+    @m.errors.full_messages.should == ['value is not a valid integer']
     
     @c.set_validations{validates_type(:String, :value)}
     @m.value = '123'
     @m.should be_valid
     @m.value = 123
     @m.should_not be_valid
-    @m.errors.full_messages.should == ['value is not a String']
+    @m.errors.full_messages.should == ['value is not a valid string']
     
     @c.set_validations{validates_type('Integer', :value)}
     @m.value = 123
     @m.should be_valid
     @m.value = 123.05
     @m.should_not be_valid
-    @m.errors.full_messages.should == ['value is not a Integer']
+    @m.errors.full_messages.should == ['value is not a valid integer']
     
     @c.set_validations{validates_type(Integer, :value)}
     @m.value = nil
     @m.should be_valid
     @m.value = false
     @m.should_not be_valid
+    
+    @c.set_validations{validates_type([Integer, Float], :value)}
+    @m.value = nil
+    @m.should be_valid
+    @m.value = 1
+    @m.should be_valid
+    @m.value = 1.0
+    @m.should be_valid
+    @m.value = BigDecimal.new('1.0')
+    @m.should_not be_valid
+    @m.errors.full_messages.should == ['value is not a valid integer or float']
   end
 
+  specify "should support validates_not_null" do
+    @c.set_validations{validates_not_null(:value)}
+    @m.should_not be_valid
+    @m.value = ''
+    @m.should be_valid
+    @m.value = 1234
+    @m.should be_valid
+    @m.value = nil
+    @m.should_not be_valid
+    @m.value = true
+    @m.should be_valid
+    @m.value = false
+    @m.should be_valid
+    @m.value = Time.now
+    @m.should be_valid
+  end
+  
   specify "should support validates_presence" do
     @c.set_validations{validates_presence(:value)}
     @m.should_not be_valid
@@ -465,5 +509,17 @@ describe "Sequel::Plugins::ValidationHelpers" do
     m.username = '2'
     m.should be_valid
     MODEL_DB.sqls.should == ["SELECT COUNT(*) AS count FROM items WHERE ((username = '2') AND (password = '1') AND (id != 3)) LIMIT 1"]
+  end
+
+  it "should not attempt a database query if the underlying columns have validation errors" do
+    @c.columns(:id, :username, :password)
+    @c.set_dataset MODEL_DB[:items]
+    @c.set_validations{validates_not_string(:username); validates_unique([:username, :password])}
+    @c.dataset._fetch = {:v=>0}
+    
+    MODEL_DB.reset
+    m = @c.new(:username => "1", :password => "anothertest")
+    m.should_not be_valid
+    MODEL_DB.sqls.should == []
   end
 end 

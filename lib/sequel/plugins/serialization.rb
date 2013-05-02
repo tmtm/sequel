@@ -30,11 +30,11 @@ module Sequel
     #
     # == Example
     #
-    #   require 'sequel'
-    #   # Require json, as the plugin doesn't require it for you.
+    #   # Require json if you plan to use it, as the plugin doesn't require it for you.
     #   require 'json'
     #
-    #   # Register custom serializer/deserializer pair
+    #   # Register custom serializer/deserializer pair, if desired
+    #   require 'sequel/plugins/serialization'
     #   Sequel::Plugins::Serialization.register_format(:reverse,
     #     lambda{|v| v.reverse},
     #     lambda{|v| v.reverse})
@@ -111,16 +111,7 @@ module Sequel
         # call be overridden and call super to get the serialization behavior
         attr_accessor :serialization_module
 
-        # Copy the serialization_map and deserialization map into the subclass.
-        def inherited(subclass)
-          super
-          sm = serialization_map.dup
-          dsm = deserialization_map.dup
-          subclass.instance_eval do
-            @deserialization_map = dsm
-            @serialization_map = sm
-          end
-        end
+        Plugins.inherited_instance_variables(self, :@deserialization_map=>:dup, :@serialization_map=>:dup)
         
         # Create instance level reader that deserializes column values on request,
         # and instance level writer that stores new deserialized values.
@@ -154,6 +145,8 @@ module Sequel
               define_method(column) do 
                 if deserialized_values.has_key?(column)
                   deserialized_values[column]
+                elsif frozen?
+                  deserialize_value(column, super())
                 else
                   deserialized_values[column] = deserialize_value(column, super())
                 end
@@ -177,6 +170,11 @@ module Sequel
         # Hash of deserialized values, used as a cache.
         def deserialized_values
           @deserialized_values ||= {}
+        end
+
+        def freeze
+          deserialized_values.freeze
+          super
         end
 
         # Initialization the deserialized values for objects retrieved from the database.

@@ -663,10 +663,8 @@ module Sequel
       #                       milestones, allowing for further filtering/limiting/etc.
       #
       # If you want to override the behavior of the add_/remove_/remove_all_/ methods
-      # or the association setter method, there are private instance methods created that are prepended
-      # with an underscore (e.g. _add_milestone or _portfolio=).  The private instance methods can be
-      # easily overridden, but you shouldn't override the public instance methods without
-      # calling super, as they deal with callbacks and caching.
+      # or the association setter method, use the :adder, :remover, :clearer, and/or :setter
+      # options.  These options override the default behavior.
       #
       # By default the classes for the associations are inferred from the association
       # name, so for example the Project#portfolio will return an instance of 
@@ -739,7 +737,9 @@ module Sequel
         #                  model object can be associated with many current model objects.
         #
         # The following options can be supplied:
-        # === All Types
+        # === Multiple Types
+        # :adder :: Proc used to define the private _add_* method for doing the database work
+        #           to associate the given object to the current object (*_to_many assocations).
         # :after_add :: Symbol, Proc, or array of both/either specifying a callback to call
         #               after a new item is added to the association.
         # :after_load :: Symbol, Proc, or array of both/either specifying a callback to call
@@ -764,6 +764,8 @@ module Sequel
         #           given, uses the association's name, which is camelized (and
         #           singularized unless the type is :many_to_one or :one_to_one).  If this is specified
         #           as a string or symbol, you must specify the full class name (e.g. "SomeModule::MyModel"). 
+        # :clearer :: Proc used to define the private _remove_all_* method for doing the database work
+        #             to remove all objects associated to the current object (*_to_many assocations).
         # :clone :: Merge the current options and block into the options and block used in defining
         #           the given association.  Can be used to DRY up a bunch of similar associations that
         #           all share the same options such as :class and :key, while changing the order and block used.
@@ -837,12 +839,16 @@ module Sequel
         #                if it exists.  By default, Sequel will try to determine it by looking at the
         #                associated model's assocations for a association that matches
         #                the current association's key(s).  Set to nil to not use a reciprocal.
+        # :remover :: Proc used to define the private _remove_* method for doing the database work
+        #             to remove the association between the given object and the current object (*_to_many assocations).
         # :select :: the columns to select.  Defaults to the associated class's
         #            table_name.* in a many_to_many association, which means it doesn't include the attributes from the
         #            join table.  If you want to include the join table attributes, you can
         #            use this option, but beware that the join table attributes can clash with
         #            attributes from the model table, so you should alias any attributes that have
         #            the same name in both the join table and the associated table.
+        # :setter :: Proc used to define the private _*= method for doing the work to setup the assocation
+        #            between the given object and the current object (*_to_one associations).
         # :validate :: Set to false to not validate when implicitly saving any associated object.
         # === :many_to_one
         # :key :: foreign key in current model's table that references
@@ -990,13 +996,6 @@ module Sequel
           ds
         end
 
-        # Copy the association reflections to the subclass
-        def inherited(subclass)
-          super
-          subclass.instance_variable_set(:@association_reflections, association_reflections.dup)
-          subclass.default_eager_limit_strategy =  default_eager_limit_strategy
-        end
-      
         # Shortcut for adding a many_to_many association, see #associate
         def many_to_many(name, opts={}, &block)
           associate(:many_to_many, name, opts, &block)
@@ -1016,6 +1015,9 @@ module Sequel
         def one_to_one(name, opts={}, &block)
           associate(:one_to_one, name, opts, &block)
         end
+
+        Plugins.inherited_instance_variables(self, :@association_reflections=>:dup, :@default_eager_limit_strategy=>nil)
+        Plugins.def_dataset_methods(self, [:eager, :eager_graph])
         
         private
       
@@ -1034,7 +1036,7 @@ module Sequel
             oproc = lambda do |x|
               case x
               when Symbol
-                t, c, a = ds.send(:split_symbol, x)
+                t, c, _ = ds.send(:split_symbol, x)
                 if t && t.to_sym == table
                   SQL::QualifiedIdentifier.new(dsa, c)
                 else
@@ -1140,7 +1142,7 @@ module Sequel
             raise(Error, "mismatched number of right keys: #{rcks.inspect} vs #{rcpks.inspect}") unless rcks.length == rcpks.length
           end
           uses_lcks = opts[:uses_left_composite_keys] = lcks.length > 1
-          uses_rcks = opts[:uses_right_composite_keys] = rcks.length > 1
+          opts[:uses_right_composite_keys] = rcks.length > 1
           opts[:cartesian_product_number] ||= 1
           join_table = (opts[:join_table] ||= opts.default_join_table)
           left_key_alias = opts[:left_key_alias] ||= opts.default_associated_key_alias
@@ -1203,18 +1205,23 @@ module Sequel
       
           return if opts[:read_only]
       
-          association_module_private_def(opts._add_method, opts) do |o|
+          adder = opts[:adder] || proc do |o|
             h = {}
             lcks.zip(lcpks).each{|k, pk| h[k] = send(pk)}
             rcks.zip(opts.right_primary_key_methods).each{|k, pk| h[k] = o.send(pk)}
             _join_table_dataset(opts).insert(h)
           end
-          association_module_private_def(opts._remove_method, opts) do |o|
+          association_module_private_def(opts._add_method, opts, &adder) 
+
+          remover = opts[:remover] || proc do |o|
             _join_table_dataset(opts).where(lcks.zip(lcpks.map{|k| send(k)}) + rcks.zip(opts.right_primary_key_methods.map{|k| o.send(k)})).delete
           end
-          association_module_private_def(opts._remove_all_method, opts) do
+          association_module_private_def(opts._remove_method, opts, &remover)
+
+          clearer = opts[:clearer] || proc do
             _join_table_dataset(opts).where(lcks.zip(lcpks.map{|k| send(k)})).delete
           end
+          association_module_private_def(opts._remove_all_method, opts, &clearer)
       
           def_add_method(opts)
           def_remove_methods(opts)
@@ -1236,7 +1243,6 @@ module Sequel
             raise(Error, "mismatched number of keys: #{cks.inspect} vs #{cpks.inspect}") unless cks.length == cpks.length
           end
           uses_cks = opts[:uses_composite_keys] = cks.length > 1
-          qualify = opts[:qualify] != false
           opts[:cartesian_product_number] ||= 0
           opts[:dataset] ||= proc do
             opts.associated_dataset.where(opts.predicate_keys.zip(cks.map{|k| send(k)}))
@@ -1274,7 +1280,8 @@ module Sequel
           
           return if opts[:read_only]
       
-          association_module_private_def(opts._setter_method, opts){|o| cks.zip(opts.primary_key_methods).each{|k, pk| send(:"#{k}=", (o.send(pk) if o))}}
+          setter = opts[:setter] || proc{|o| cks.zip(opts.primary_key_methods).each{|k, pk| send(:"#{k}=", (o.send(pk) if o))}}
+          association_module_private_def(opts._setter_method, opts, &setter)
           association_module_def(opts.setter_method, opts){|o| set_associated_object(opts, o)}
         end
         
@@ -1369,7 +1376,7 @@ module Sequel
             validate = opts[:validate]
 
             if one_to_one
-              association_module_private_def(opts._setter_method, opts) do |o|
+              setter = opts[:setter] || proc do |o|
                 up_ds = _apply_association_options(opts, opts.associated_dataset.where(cks.zip(cpks.map{|k| send(k)})))
                 if o
                   up_ds = up_ds.exclude(o.pk_hash) unless o.new?
@@ -1380,21 +1387,27 @@ module Sequel
                   o.save(:validate=>validate) || raise(Sequel::Error, "invalid associated object, cannot save") if o
                 end
               end
+              association_module_private_def(opts._setter_method, opts, &setter)
               association_module_def(opts.setter_method, opts){|o| set_one_to_one_associated_object(opts, o)}
             else 
-              association_module_private_def(opts._add_method, opts) do |o|
+              adder = opts[:adder] || proc do |o|
                 cks.zip(cpks).each{|k, pk| o.send(:"#{k}=", send(pk))}
                 o.save(:validate=>validate) || raise(Sequel::Error, "invalid associated object, cannot save")
               end
-              def_add_method(opts)
+              association_module_private_def(opts._add_method, opts, &adder)
       
-              association_module_private_def(opts._remove_method, opts) do |o|
+              remover = opts[:remover] || proc do |o|
                 cks.each{|k| o.send(:"#{k}=", nil)}
                 o.save(:validate=>validate) || raise(Sequel::Error, "invalid associated object, cannot save")
               end
-              association_module_private_def(opts._remove_all_method, opts) do
+              association_module_private_def(opts._remove_method, opts, &remover)
+
+              clearer = opts[:clearer] || proc do
                 _apply_association_options(opts, opts.associated_dataset.where(cks.zip(cpks.map{|k| send(k)}))).update(ck_nil_hash)
               end
+              association_module_private_def(opts._remove_all_method, opts, &clearer)
+
+              def_add_method(opts)
               def_remove_methods(opts)
             end
           end
@@ -1511,8 +1524,8 @@ module Sequel
             else
               _load_associated_object(opts, dynamic_opts)
             end
-          else
-            [] if opts.returns_array?
+          elsif opts.returns_array?
+            []
           end
         end
         
@@ -1911,7 +1924,6 @@ module Sequel
           else
             alias_base = r[:graph_alias_base]
           end
-          assoc_name = r[:name]
           assoc_table_alias = ds.unused_table_alias(alias_base)
           loader = r[:eager_grapher]
           if !associations.empty?

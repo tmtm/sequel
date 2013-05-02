@@ -55,7 +55,7 @@ describe "pg_json extension" do
     end
   end
 
-  it "should literalize HStores to strings correctly" do
+  it "should literalize JSONHash and JSONArray to strings correctly" do
     @db.literal(Sequel.pg_json([])).should == "'[]'::json"
     @db.literal(Sequel.pg_json([1, [2], {'a'=>'b'}])).should == "'[1,[2],{\"a\":\"b\"}]'::json"
     @db.literal(Sequel.pg_json({})).should == "'{}'::json"
@@ -109,5 +109,10 @@ describe "pg_json extension" do
     @db.typecast_value(:json, '{"a": "b"}').should == Sequel.pg_json("a"=>"b")
     proc{@db.typecast_value(:json, '')}.should raise_error(Sequel::InvalidValue)
     proc{@db.typecast_value(:json, 1)}.should raise_error(Sequel::InvalidValue)
+  end
+
+  it "should return correct results for Database#schema_type_class" do
+    @db.schema_type_class(:json).should == [Sequel::Postgres::JSONHash, Sequel::Postgres::JSONArray]
+    @db.schema_type_class(:integer).should == Integer
   end
 end

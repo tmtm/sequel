@@ -18,6 +18,33 @@ module Sequel
     # have specific support for the database in use.
     DEFAULT_DATABASE_ERROR_REGEXPS = {}.freeze
 
+    # Mapping of schema type symbols to class or arrays of classes for that
+    # symbol.
+    SCHEMA_TYPE_CLASSES = {:string=>String, :integer=>Integer, :date=>Date, :datetime=>[Time, DateTime].freeze,
+      :time=>Sequel::SQLTime, :boolean=>[TrueClass, FalseClass].freeze, :float=>Float, :decimal=>BigDecimal,
+      :blob=>Sequel::SQL::Blob}.freeze
+
+    # Nested hook Proc; each new hook Proc just wraps the previous one.
+    @initialize_hook = Proc.new {|db| }
+
+    # Register a hook that will be run when a new Database is instantiated. It is
+    # called with the new database handle.
+    def self.after_initialize(&block)
+      raise Error, "must provide block to after_initialize" unless block
+      Sequel.synchronize do
+        previous = @initialize_hook
+        @initialize_hook = Proc.new do |db|
+          previous.call(db)
+          block.call(db)
+        end
+      end
+    end
+
+    # Apply an extension to all Database objects created in the future.
+    def self.extension(*extensions)
+      after_initialize{|db| db.extension(*extensions)}
+    end
+
     # Register an extension callback for Database objects.  ext should be the
     # extension name symbol, and mod should either be a Module that the
     # database is extended with, or a callable object called with the database
@@ -35,6 +62,11 @@ module Sequel
       Sequel.synchronize{EXTENSIONS[ext] = block}
     end
 
+    # Run the after_initialize hook for the given +instance+.
+    def self.run_after_initialize(instance)
+      @initialize_hook.call(instance)
+    end
+
     # Converts a uri to an options hash. These options are then passed
     # to a newly created database object. 
     def self.uri_to_options(uri)
@@ -45,7 +77,7 @@ module Sequel
         :database => (m = /\/(.*)/.match(uri.path)) && (m[1]) }
     end
     private_class_method :uri_to_options
-    
+
     # The options hash for this database
     attr_reader :opts
     
@@ -93,10 +125,14 @@ module Sequel
       @dataset_class = dataset_class_default
       @cache_schema = typecast_value_boolean(@opts.fetch(:cache_schema, true))
       @dataset_modules = []
+      @schema_type_classes = SCHEMA_TYPE_CLASSES.dup
       self.sql_log_level = @opts[:sql_log_level] ? @opts[:sql_log_level].to_sym : :info
       @pool = ConnectionPool.get_pool(self, @opts)
 
-      Sequel.synchronize{::Sequel::DATABASES.push(self)}
+      unless typecast_value_boolean(@opts[:keep_reference]) == false
+        Sequel.synchronize{::Sequel::DATABASES.push(self)}
+      end
+      Sequel::Database.run_after_initialize(self)
     end
 
     # If a transaction is not currently in process, yield to the block immediately.
@@ -201,6 +237,11 @@ module Sequel
     def quote_identifier(v)
       schema_utility_dataset.quote_identifier(v)
     end
+
+    # Return ruby class or array of classes for the given type symbol.
+    def schema_type_class(type)
+      @schema_type_classes[type]
+    end
     
     # Default serial primary key options, used by the table creation
     # code.
@@ -210,6 +251,7 @@ module Sequel
 
     # Cache the prepared statement object at the given name.
     def set_prepared_statement(name, ps)
+      ps.prepared_sql
       Sequel.synchronize{prepared_statements[name] = ps}
     end
 
@@ -306,8 +348,8 @@ module Sequel
           return klass
         end
       else
-        database_error_regexps.each do |regexp, klass|
-          return klass if exception.message =~ regexp
+        database_error_regexps.each do |regexp, klss|
+          return klss if exception.message =~ regexp
         end
       end
 
@@ -349,7 +391,7 @@ module Sequel
         raise exception
       end
     end
-    
+
     # Typecast the value to an SQL::Blob
     def typecast_value_blob(value)
       value.is_a?(Sequel::SQL::Blob) ? value : Sequel::SQL::Blob.new(value)

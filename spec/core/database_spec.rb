@@ -43,10 +43,10 @@ describe "A new Database" do
     Sequel::Database.new(:max_connections => 10).pool.max_size.should == 10
   end
   
-  specify "should pass the supplied block to the connection pool" do
+  specify "should have the connection pool use the connect method to get connections" do
     cc = nil
     d = Sequel::Database.new
-    d.meta_def(:connect){|c| 1234}
+    meta_def(d, :connect){|c| 1234}
     d.synchronize {|c| cc = c}
     cc.should == 1234
   end
@@ -204,6 +204,11 @@ describe "A new Database" do
   specify "should populate :adapter option when using connection string" do
     Sequel.connect('mock:/').opts[:adapter].should == "mock"
   end
+
+  specify "should respect the :keep_reference option for not keeping a reference in Sequel::DATABASES" do
+    db = Sequel.connect('mock:///?keep_reference=f')
+    Sequel::DATABASES.should_not include(db)
+  end
 end
 
 describe "Database#disconnect" do
@@ -343,7 +348,7 @@ describe "Database#uri" do
 end
 
 describe "Database.adapter_scheme and #adapter_scheme" do
-  specify "should return the database schema" do
+  specify "should return the database scheme" do
     Sequel::Database.adapter_scheme.should be_nil
 
     @c = Class.new(Sequel::Database) do
@@ -470,7 +475,7 @@ describe "Database#extend_datasets" do
     @db[:t].select(:a, :b).sql.should == 'SELECT a, b FROM t ORDER BY a, b'
   end
 
-  specify "should reapply settings if dataset_class is chagned" do
+  specify "should reapply settings if dataset_class is changed" do
     c = Class.new(Sequel::Dataset)
     @db.dataset_class = c
     @db.dataset_class.superclass.should == c
@@ -568,11 +573,11 @@ end
 describe "Database#synchronize" do
   before do
     @db = Sequel::Database.new(:max_connections => 1)
-    @db.meta_def(:connect){|c| 12345}
+    meta_def(@db, :connect){|c| 12345}
   end
   
   specify "should wrap the supplied block in pool.hold" do
-    q, q1, q2, q3 = Queue.new, Queue.new, Queue.new, Queue.new
+    q, q1, q2 = Queue.new, Queue.new, Queue.new
     c1, c2 = nil
     t1 = Thread.new{@db.synchronize{|c| c1 = c; q.push nil; q1.pop}; q.push nil}
     q.pop
@@ -593,7 +598,7 @@ describe "Database#test_connection" do
   before do
     @db = Sequel::Database.new
     pr = proc{@test = rand(100)}
-    @db.meta_def(:connect){|c| pr.call}
+    meta_def(@db, :connect){|c| pr.call}
   end
   
   specify "should attempt to get a connection" do
@@ -611,7 +616,7 @@ describe "Database#test_connection" do
 end
 
 describe "Database#table_exists?" do
-  specify "should try to select the first record from the table's dataset" do
+  specify "should test existence by selecting a row from the table's dataset" do
     db = Sequel.mock(:fetch=>[Sequel::Error, [], [{:a=>1}]])
     db.table_exists?(:a).should be_false
     db.sqls.should == ["SELECT NULL FROM a LIMIT 1"]
@@ -627,7 +632,7 @@ shared_examples_for "Database#transaction" do
   end
   
   specify "should support transaction isolation levels" do
-    @db.meta_def(:supports_transaction_isolation_levels?){true}
+    meta_def(@db, :supports_transaction_isolation_levels?){true}
     [:uncommitted, :committed, :repeatable, :serializable].each do |l|
       @db.transaction(:isolation=>l){@db.run "DROP TABLE #{l}"}
     end
@@ -638,7 +643,7 @@ shared_examples_for "Database#transaction" do
   end
 
   specify "should allow specifying a default transaction isolation level" do
-    @db.meta_def(:supports_transaction_isolation_levels?){true}
+    meta_def(@db, :supports_transaction_isolation_levels?){true}
     [:uncommitted, :committed, :repeatable, :serializable].each do |l|
       @db.transaction_isolation_level = l
       @db.transaction{@db.run "DROP TABLE #{l}"}
@@ -715,7 +720,6 @@ shared_examples_for "Database#transaction" do
       transaction do
         execute 'DROP TABLE test;'
         return
-        execute 'DROP TABLE test2;';
       end
     end
     @db.ret_commit
@@ -731,8 +735,8 @@ shared_examples_for "Database#transaction" do
   
   specify "should handle errors when sending BEGIN" do
     ec = Class.new(StandardError)
-    @db.meta_def(:database_error_classes){[ec]}
-    @db.meta_def(:log_connection_execute){|c, sql| sql =~ /BEGIN/ ? raise(ec, 'bad') : super(c, sql)}
+    meta_def(@db, :database_error_classes){[ec]}
+    meta_def(@db, :log_connection_execute){|c, sql| sql =~ /BEGIN/ ? raise(ec, 'bad') : super(c, sql)}
     begin
       @db.transaction{@db.execute 'DROP TABLE test;'}
     rescue Sequel::DatabaseError => e
@@ -744,8 +748,8 @@ shared_examples_for "Database#transaction" do
   
   specify "should handle errors when sending COMMIT" do
     ec = Class.new(StandardError)
-    @db.meta_def(:database_error_classes){[ec]}
-    @db.meta_def(:log_connection_execute){|c, sql| sql =~ /COMMIT/ ? raise(ec, 'bad') : super(c, sql)}
+    meta_def(@db, :database_error_classes){[ec]}
+    meta_def(@db, :log_connection_execute){|c, sql| sql =~ /COMMIT/ ? raise(ec, 'bad') : super(c, sql)}
     begin
       @db.transaction{@db.execute 'DROP TABLE test;'}
     rescue Sequel::DatabaseError => e
@@ -757,8 +761,8 @@ shared_examples_for "Database#transaction" do
   
   specify "should handle errors when sending ROLLBACK" do
     ec = Class.new(StandardError)
-    @db.meta_def(:database_error_classes){[ec]}
-    @db.meta_def(:log_connection_execute){|c, sql| sql =~ /ROLLBACK/ ? raise(ec, 'bad') : super(c, sql)}
+    meta_def(@db, :database_error_classes){[ec]}
+    meta_def(@db, :log_connection_execute){|c, sql| sql =~ /ROLLBACK/ ? raise(ec, 'bad') : super(c, sql)}
     begin
       @db.transaction{raise ArgumentError, 'asdf'}
     rescue Sequel::DatabaseError => e
@@ -815,17 +819,17 @@ shared_examples_for "Database#transaction" do
     @db.sqls.should == ['BEGIN', 'ROLLBACK']
     @db.transaction(:rollback=>:always){1}.should be_nil
     @db.sqls.should == ['BEGIN', 'ROLLBACK']
-    catch (:foo) do
+    catch(:foo) do
       @db.transaction(:rollback=>:always){throw :foo}
     end
     @db.sqls.should == ['BEGIN', 'ROLLBACK']
   end
   
   specify "should raise database errors when commiting a transaction as Sequel::DatabaseError" do
-    @db.meta_def(:commit_transaction){raise ArgumentError}
+    meta_def(@db, :commit_transaction){raise ArgumentError}
     lambda{@db.transaction{}}.should raise_error(ArgumentError)
 
-    @db.meta_def(:database_error_classes){[ArgumentError]}
+    meta_def(@db, :database_error_classes){[ArgumentError]}
     lambda{@db.transaction{}}.should raise_error(Sequel::DatabaseError)
   end
   
@@ -942,13 +946,13 @@ shared_examples_for "Database#transaction" do
   end
 
   specify "should raise an error if you attempt to use after_commit inside a prepared transaction" do
-    @db.meta_def(:supports_prepared_transactions?){true}
+    meta_def(@db, :supports_prepared_transactions?){true}
     proc{@db.transaction(:prepare=>'XYZ'){@db.after_commit{@db.execute('foo')}}}.should raise_error(Sequel::Error)
     @db.sqls.should == ['BEGIN', 'ROLLBACK']
   end
 
   specify "should raise an error if you attempt to use after_rollback inside a prepared transaction" do
-    @db.meta_def(:supports_prepared_transactions?){true}
+    meta_def(@db, :supports_prepared_transactions?){true}
     proc{@db.transaction(:prepare=>'XYZ'){@db.after_rollback{@db.execute('foo')}}}.should raise_error(Sequel::Error)
     @db.sqls.should == ['BEGIN', 'ROLLBACK']
   end
@@ -962,7 +966,7 @@ describe "Database#transaction with savepoint support" do
   it_should_behave_like "Database#transaction"
 
   specify "should support after_commit inside savepoints" do
-    @db.meta_def(:supports_savepoints?){true}
+    meta_def(@db, :supports_savepoints?){true}
     @db.transaction do
       @db.after_commit{@db.execute('foo')}
       @db.transaction(:savepoint=>true){@db.after_commit{@db.execute('bar')}}
@@ -972,7 +976,7 @@ describe "Database#transaction with savepoint support" do
   end
 
   specify "should support after_rollback inside savepoints" do
-    @db.meta_def(:supports_savepoints?){true}
+    meta_def(@db, :supports_savepoints?){true}
     @db.transaction do
       @db.after_rollback{@db.execute('foo')}
       @db.transaction(:savepoint=>true){@db.after_rollback{@db.execute('bar')}}
@@ -983,15 +987,15 @@ describe "Database#transaction with savepoint support" do
   end
 
   specify "should raise an error if you attempt to use after_commit inside a savepoint in a prepared transaction" do
-    @db.meta_def(:supports_savepoints?){true}
-    @db.meta_def(:supports_prepared_transactions?){true}
+    meta_def(@db, :supports_savepoints?){true}
+    meta_def(@db, :supports_prepared_transactions?){true}
     proc{@db.transaction(:prepare=>'XYZ'){@db.transaction(:savepoint=>true){@db.after_commit{@db.execute('foo')}}}}.should raise_error(Sequel::Error)
     @db.sqls.should == ['BEGIN', 'SAVEPOINT autopoint_1','ROLLBACK TO SAVEPOINT autopoint_1', 'ROLLBACK']
   end
 
   specify "should raise an error if you attempt to use after_rollback inside a savepoint in a prepared transaction" do
-    @db.meta_def(:supports_savepoints?){true}
-    @db.meta_def(:supports_prepared_transactions?){true}
+    meta_def(@db, :supports_savepoints?){true}
+    meta_def(@db, :supports_prepared_transactions?){true}
     proc{@db.transaction(:prepare=>'XYZ'){@db.transaction(:savepoint=>true){@db.after_rollback{@db.execute('foo')}}}}.should raise_error(Sequel::Error)
     @db.sqls.should == ['BEGIN', 'SAVEPOINT autopoint_1','ROLLBACK TO SAVEPOINT autopoint_1', 'ROLLBACK']
   end
@@ -1000,7 +1004,7 @@ end
 describe "Database#transaction without savepoint support" do
   before do
     @db = Sequel.mock(:servers=>{:test=>{}})
-    @db.meta_def(:supports_savepoints?){false}
+    meta_def(@db, :supports_savepoints?){false}
   end
 
   it_should_behave_like "Database#transaction"
@@ -1058,7 +1062,7 @@ describe "Database#transaction with savepoints" do
     @db.sqls.should == ['BEGIN', 'SAVEPOINT autopoint_1', 'DROP TABLE test;', 'RELEASE SAVEPOINT autopoint_1', 'COMMIT']
   end
   
-  specify "should not use a savepoints if no transaction is in progress" do
+  specify "should not use a savepoint if no transaction is in progress" do
     @db.transaction(:savepoint=>true){@db.execute 'DROP TABLE test;'}
     @db.sqls.should == ['BEGIN', 'DROP TABLE test;', 'COMMIT']
   end
@@ -1073,7 +1077,6 @@ describe "Database#transaction with savepoints" do
       transaction do
         execute 'DROP TABLE test;'
         return
-        execute 'DROP TABLE test2;';
       end
     end
     @db.ret_commit
@@ -1086,7 +1089,6 @@ describe "Database#transaction with savepoints" do
         transaction(:savepoint=>true) do
           execute 'DROP TABLE test;'
           return
-          execute 'DROP TABLE test2;';
         end
       end
     end
@@ -1131,11 +1133,11 @@ describe "Database#transaction with savepoints" do
   end
   
   specify "should raise database errors when commiting a transaction as Sequel::DatabaseError" do
-    @db.meta_def(:commit_transaction){raise ArgumentError}
+    meta_def(@db, :commit_transaction){raise ArgumentError}
     lambda{@db.transaction{}}.should raise_error(ArgumentError)
     lambda{@db.transaction{@db.transaction(:savepoint=>true){}}}.should raise_error(ArgumentError)
 
-    @db.meta_def(:database_error_classes){[ArgumentError]}
+    meta_def(@db, :database_error_classes){[ArgumentError]}
     lambda{@db.transaction{}}.should raise_error(Sequel::DatabaseError)
     lambda{@db.transaction{@db.transaction(:savepoint=>true){}}}.should raise_error(Sequel::DatabaseError)
   end
@@ -1200,6 +1202,7 @@ describe "A Database adapter with a scheme" do
     Sequel.send(:def_adapter_method, :ccc)
     Sequel.ccc('db', :host=>'localhost', &p).should == returnValue
     @ccc::DISCONNECTS.should == [z, y, x]
+    class << Sequel; remove_method(:ccc) end
   end
 
   specify "should be accessible through Sequel.<adapter>" do
@@ -1223,6 +1226,7 @@ describe "A Database adapter with a scheme" do
     c = Sequel.ccc(:database => 'mydb', :host => 'localhost')
     c.should be_a_kind_of(@ccc)
     c.opts.values_at(:adapter, :database, :host, :adapter_class).should == [:ccc, 'mydb', 'localhost', @ccc]
+    class << Sequel; remove_method(:ccc) end
   end
   
   specify "should be accessible through Sequel.connect with options" do
@@ -1340,7 +1344,7 @@ describe "A single threaded database" do
   before do
     conn = 1234567
     @db = Sequel::Database.new(:single_threaded => true)
-    @db.meta_def(:connect) do |c|
+    meta_def(@db, :connect) do |c|
       conn += 1
     end
   end
@@ -1692,7 +1696,7 @@ describe "Database#each_server" do
     @db.each_server do |db|
       dbs << db
       Sequel::DATABASES.should include(db)
-      db.meta_def(:disconnect){dcs << db}
+      meta_def(db, :disconnect){dcs << db}
     end
     dbs.each do |db|
       Sequel::DATABASES.should_not include(db)
@@ -2099,6 +2103,18 @@ describe "Database#schema_autoincrementing_primary_key?" do
   end
 end
 
+describe "Database#supports_schema_parsing?" do
+  specify "should be false by default" do
+    Sequel::Database.new.supports_schema_parsing?.should == false
+  end
+
+  specify "should be true if the database implements schema_parse_table" do
+    db = Sequel::Database.new
+    def db.schema_parse_table(*) end
+    db.supports_schema_parsing?.should == true
+  end
+end
+
 describe "Database#supports_deferrable_constraints?" do
   specify "should be false by default" do
     Sequel::Database.new.supports_deferrable_constraints?.should == false
@@ -2136,8 +2152,8 @@ describe "Database#supports_savepoints_in_prepared_transactions?" do
 
   specify "should be true if both savepoints and prepared transactions are supported" do
     db = Sequel::Database.new
-    db.meta_def(:supports_savepoints?){true}
-    db.meta_def(:supports_prepared_transactions?){true}
+    meta_def(db, :supports_savepoints?){true}
+    meta_def(db, :supports_prepared_transactions?){true}
     db.supports_savepoints_in_prepared_transactions?.should == true
   end
 end
@@ -2259,25 +2275,31 @@ describe "Database extensions" do
   before(:all) do
     class << Sequel
       alias _extension extension
+      remove_method :extension
       def extension(*)
       end
     end
   end
   after(:all) do
     class << Sequel
+      remove_method :extension
       alias extension _extension
+      remove_method :_extension
     end
   end
   before do
     @db = Sequel.mock
   end
+  after do
+    Sequel::Database.instance_variable_set(:@initialize_hook, Proc.new {|db| })
+  end
 
-  specify "should be able to register an extension with a module Database#extension extend the module" do
+  specify "should be able to register an extension with a module have Database#extension extend the module" do
     Sequel::Database.register_extension(:foo, Module.new{def a; 1; end})
     @db.extension(:foo).a.should == 1
   end
 
-  specify "should be able to register an extension with a block and Database#extension call the block" do
+  specify "should be able to register an extension with a block and have Database#extension call the block" do
     @db.quote_identifiers = false
     Sequel::Database.register_extension(:foo){|db| db.quote_identifiers = true}
     @db.extension(:foo).quote_identifiers?.should be_true
@@ -2311,6 +2333,16 @@ describe "Database extensions" do
   specify "should raise an Error if attempting to load an incompatible extension" do
     proc{@db.extension(:foo2)}.should raise_error(Sequel::Error)
   end
+
+  specify "should be able to load an extension into all future Databases with Database.extension" do
+    Sequel::Database.register_extension(:foo, Module.new{def a; 1; end})
+    Sequel::Database.register_extension(:bar, Module.new{def b; 2; end})
+    Sequel::Database.extension(:foo, :bar)
+    @db.should_not respond_to(:a)
+    @db.should_not respond_to(:b)
+    Sequel.mock.a.should == 1
+    Sequel.mock.b.should == 2
+  end
 end
 
 describe "Database specific exception classes" do
@@ -2337,5 +2369,44 @@ describe "Database specific exception classes" do
     proc{@db.get(1)}.should raise_error(Sequel::CheckConstraintViolation)
     @db.sql_state = '40001'
     proc{@db.get(1)}.should raise_error(Sequel::SerializationFailure)
+  end
+end
+
+describe "Database.after_initialize" do
+  after do
+    Sequel::Database.instance_variable_set(:@initialize_hook, Proc.new {|db| })
+  end
+
+  specify "should allow a block to be run after each new instance is created" do
+    Sequel::Database.after_initialize{|db| db.sql_log_level = :debug }
+    db = Sequel.mock
+    db.sql_log_level.should == :debug
+  end
+
+  specify "should allow multiple hooks to be registered" do
+    Sequel::Database.after_initialize{|db| db.sql_log_level = :debug }
+    Sequel::Database.after_initialize{|db| db.loggers << 11 }
+
+    db = Sequel.mock
+
+    db.sql_log_level.should == :debug
+    db.loggers.should include(11)
+  end
+
+  specify "should raise an error if registration is called without a block" do
+    proc {
+      Sequel::Database.after_initialize
+    }.should raise_error(Sequel::Error, /must provide block/i)
+  end
+end
+
+describe "Database#schema_type_class" do
+  specify "should return the class or array of classes for the given type symbol" do
+    db = Sequel.mock
+    {:string=>String, :integer=>Integer, :date=>Date, :datetime=>[Time, DateTime],
+      :time=>Sequel::SQLTime, :boolean=>[TrueClass, FalseClass], :float=>Float, :decimal=>BigDecimal,
+      :blob=>Sequel::SQL::Blob}.each do |sym, klass|
+      db.schema_type_class(sym).should == klass
+    end
   end
 end

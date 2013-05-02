@@ -21,7 +21,6 @@ module Sequel
       # Setup the validations hash for the given model.
       def self.apply(model)
         model.class_eval do
-          @validation_mutex = Mutex.new
           @validations = {}
           @validation_reflections = {}
         end
@@ -63,21 +62,15 @@ module Sequel
           !validations.empty?
         end
 
-        # Setup the validations and validation_reflections hash in the subclass.
-        def inherited(subclass)
-          vr = @validation_reflections
-          subclass.class_eval do
-            @validation_mutex = Mutex.new
-            @validations = {}
-            h = {}
-            vr.each{|k,v| h[k] = v.dup}
-            @validation_reflections = h
-          end
-          super
-        end
-    
+        Plugins.inherited_instance_variables(self, :@validations=>:hash_dup, :@validation_reflections=>:hash_dup)
+
         # Instructs the model to skip validations defined in superclasses
         def skip_superclass_validations
+          superclass.validations.each do |att, procs|
+            if ps = @validations[att]
+              @validations[att] -= procs
+            end
+          end
           @skip_superclass_validations = true
         end
         
@@ -107,7 +100,6 @@ module Sequel
     
         # Validates the given instance.
         def validate(o)
-          superclass.validate(o) if superclass.respond_to?(:validate) && !skip_superclass_validations?
           validations.each do |att, procs|
             v = case att
             when Array
@@ -200,7 +192,7 @@ module Sequel
           end
           tag = opts[:tag]
           atts.each do |a| 
-            a_vals = @validation_mutex.synchronize{validations[a] ||= []}
+            a_vals = Sequel.synchronize{validations[a] ||= []}
             if tag && (old = a_vals.find{|x| x[0] == tag})
               old[1] = blk
             else
@@ -362,6 +354,28 @@ module Sequel
           end
         end
     
+        # Validates whether an attribute has the correct ruby type for the associated
+        # database type.  This is generally useful in conjunction with
+        # raise_on_typecast_failure = false, to handle typecasting errors at validation
+        # time instead of at setter time. 
+        #
+        # Possible Options:
+        # * :message - The message to use (default: 'is not a valid (integer|datetime|etc.)')
+        def validates_schema_type(*atts)
+          opts = {
+            :tag => :schema_type,
+          }.merge!(extract_options!(atts))
+          reflect_validation(:schema_type, opts, atts)
+          atts << opts
+          validates_each(*atts) do |o, a, v|
+            next if v.nil? || (klass = o.send(:schema_type_class, a)).nil?
+            if klass.is_a?(Array) ? !klass.any?{|kls| v.is_a?(kls)} : !v.is_a?(klass)
+              message = opts[:message] || "is not a valid #{Array(klass).join(" or ").downcase}"
+              o.errors.add(a, message)
+            end
+          end
+        end
+    
         # Validates only if the fields in the model (specified by atts) are
         # unique in the database.  Pass an array of fields instead of multiple
         # fields to specify that the combination of fields must be unique,
@@ -446,6 +460,7 @@ module Sequel
         # Validates the object.
         def validate
           model.validate(self)
+          super
         end
       end
     end

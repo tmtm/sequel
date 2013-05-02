@@ -76,7 +76,6 @@ describe "Serialization plugin" do
   it "should translate values to and from yaml serialization format using accessor methods" do
     @c.set_primary_key :id
     @c.plugin :serialization, :yaml, :abc, :def
-    vals = nil
     @c.dataset._fetch = {:id => 1, :abc => "--- 1\n", :def => "--- hello\n"}
 
     o = @c.first
@@ -289,5 +288,20 @@ describe "Serialization plugin" do
     @c.plugin :serialization, :yaml, :abc
     o = @c.load(:abc => 3)
     o.abc.should == 9
+  end
+
+  it "should work correctly with frozen instances" do
+    @c.set_primary_key :id
+    @c.plugin :serialization, :yaml, :abc, :def
+    @c.dataset._fetch = {:id => 1, :abc => "--- 1\n", :def => "--- hello\n"}
+
+    o = @c.first
+    o.freeze
+    o.abc.should == 1
+    o.abc.should == 1
+    o.def.should == "hello"
+    o.def.should == "hello"
+    proc{o.abc = 2}.should raise_error
+    proc{o.def = 'h'}.should raise_error
   end
 end

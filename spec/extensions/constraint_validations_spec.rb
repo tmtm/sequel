@@ -66,7 +66,7 @@ describe "constraint_validations extension" do
     @db.sqls.should == ["DELETE FROM cv WHERE (table = 'foo')"]
   end
 
-  it "should raise an error without deleting if attempting to drop validations with table, column, or constraint" do
+  it "should raise an error without deleting if attempting to drop validations without table, column, or constraint" do
     proc{@db.drop_constraint_validations_for({})}.should raise_error(Sequel::Error)
     @db.sqls.should == []
   end
@@ -97,7 +97,7 @@ describe "constraint_validations extension" do
     @db.create_table(:foo){String :name; validate{presence :name, :allow_nil=>true}}
     sqls = @db.sqls
     parse_insert(sqls.slice!(1)).should == {:validation_type=>"presence", :column=>"name", :table=>"foo", :allow_nil=>'t'}
-    sqls.should == ["BEGIN", "COMMIT", "CREATE TABLE foo (name varchar(255), CHECK (trim(name) != ''))"]
+    sqls.should == ["BEGIN", "COMMIT", "CREATE TABLE foo (name varchar(255), CHECK ((name IS NULL) OR (trim(name) != '')))"]
   end
 
   it "should handle :name option when adding validations" do
@@ -193,7 +193,7 @@ describe "constraint_validations extension" do
   it "should support :format constraint validation" do
     @db = Sequel.mock(:host=>'postgres')
     @db.extension(:constraint_validations)
-    @db.create_table(:foo){String :name; validate{format /^foo.*/, :name}}
+    @db.create_table(:foo){String :name; validate{format(/^foo.*/, :name)}}
     sqls = @db.sqls
     parse_insert(sqls.slice!(1)).should == {:validation_type=>"format", :column=>"name", :table=>"foo", :argument=>'^foo.*'}
     sqls.should == ["BEGIN", "COMMIT", "CREATE TABLE foo (name text, CHECK ((name IS NOT NULL) AND (name ~ '^foo.*')))"]
@@ -202,7 +202,7 @@ describe "constraint_validations extension" do
   it "should support :format constraint validation with case insensitive format" do
     @db = Sequel.mock(:host=>'postgres')
     @db.extension(:constraint_validations)
-    @db.create_table(:foo){String :name; validate{format /^foo.*/i, :name}}
+    @db.create_table(:foo){String :name; validate{format(/^foo.*/i, :name)}}
     sqls = @db.sqls
     parse_insert(sqls.slice!(1)).should == {:validation_type=>"iformat", :column=>"name", :table=>"foo", :argument=>'^foo.*'}
     sqls.should == ["BEGIN", "COMMIT", "CREATE TABLE foo (name text, CHECK ((name IS NOT NULL) AND (name ~* '^foo.*')))"]

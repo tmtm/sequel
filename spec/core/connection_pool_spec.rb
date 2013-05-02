@@ -3,9 +3,9 @@ CONNECTION_POOL_DEFAULTS = {:pool_timeout=>5, :pool_sleep_time=>0.001, :max_conn
 
 mock_db = lambda do |*a, &b|
   db = Sequel.mock
-  db.meta_def(:connect){|c| b.arity == 1 ? b.call(c) : b.call} if b
+  (class << db; self end).send(:define_method, :connect){|c| b.arity == 1 ? b.call(c) : b.call} if b
   if b2 = a.shift
-    db.meta_def(:disconnect_connection){|c| b2.arity == 1 ? b2.call(c) : b2.call}
+    (class << db; self end).send(:define_method, :disconnect_connection){|c| b2.arity == 1 ? b2.call(c) : b2.call}
   end
   db
 end
@@ -100,7 +100,7 @@ describe "A connection pool handling connections" do
     @cpool.created_count.should <= @max_size
   end
 
-  specify ":disconnection_proc option should set the disconnection proc to use" do
+  specify "database's disconnect connection method should be called when a disconnect is detected" do
     @max_size.should == 2
     proc{@cpool.hold{raise Sequel::DatabaseDisconnectError}}.should raise_error(Sequel::DatabaseDisconnectError)
     @max_size.should == 3
@@ -144,7 +144,7 @@ describe "ConnectionPool#hold" do
     @pool = Sequel::ConnectionPool.get_pool(mock_db.call{c.new}, CONNECTION_POOL_DEFAULTS)
   end
   
-  specify "should pass the result of the connection maker proc to the supplied block" do
+  specify "shoulda use the database's connect method to get new connections" do
     res = nil
     @pool.hold {|c| res = c}
     res.should be_a_kind_of(@c)
@@ -156,7 +156,7 @@ describe "ConnectionPool#hold" do
   
   specify "should be re-entrant by the same thread" do
     cc = nil
-    @pool.hold {|c| @pool.hold {|c| @pool.hold {|c| cc = c}}}
+    @pool.hold {|c| @pool.hold {|c1| @pool.hold {|c2| cc = c2}}}
     cc.should be_a_kind_of(@c)
   end
   
@@ -220,10 +220,10 @@ describe "A connection pool with a max size of 1" do
     c1, c2, c3 = nil
     @pool.hold do |c|
       c1 = c
-      @pool.hold do |c|
-        c2 = c
-        @pool.hold do |c|
-          c3 = c
+      @pool.hold do |cc2|
+        c2 = cc2
+        @pool.hold do |cc3|
+          c3 = cc3
         end
       end
     end
@@ -295,7 +295,6 @@ shared_examples_for "A threaded connection pool" do
   end
 
   specify "should raise a PoolTimeout error if a connection couldn't be acquired before timeout" do
-    x = nil
     q, q1 = Queue.new, Queue.new
     pool = Sequel::ConnectionPool.get_pool(mock_db.call(&@icpp), @cp_opts.merge(:max_connections=>1, :pool_timeout=>0))
     t = Thread.new{pool.hold{|c| q1.push nil; q.pop}}
@@ -396,8 +395,8 @@ shared_examples_for "A threaded connection pool" do
   specify "should not store connections if :connection_handling=>:disconnect" do
     @pool = Sequel::ConnectionPool.get_pool(mock_db.call(&@icpp), @cp_opts.merge(:connection_handling=>:disconnect))
     d = []
-    @pool.db.meta_def(:disconnect_connection){|c| d << c}
-    c = @pool.hold do |cc|
+    meta_def(@pool.db, :disconnect_connection){|c| d << c}
+    @pool.hold do |cc|
       cc.should == 1
       Thread.new{@pool.hold{|cc2| cc2.should == 2}}.join
       d.should == [2]
@@ -456,7 +455,7 @@ describe "ConnectionPool#disconnect" do
     @pool.available_connections.size.should == 5
     @pool.available_connections.each {|c| c[:id].should_not be_nil}
     conns = []
-    @pool.db.meta_def(:disconnect_connection){|c| conns << c}
+    meta_def(@pool.db, :disconnect_connection){|c| conns << c}
     @pool.disconnect
     conns.size.should == 5
   end
@@ -473,7 +472,7 @@ describe "ConnectionPool#disconnect" do
       @pool.available_connections.size.should == 4
       @pool.available_connections.each {|c| c.should_not be(conn)}
       conns = []
-      @pool.db.meta_def(:disconnect_connection){|c| conns << c}
+      meta_def(@pool.db, :disconnect_connection){|c| conns << c}
       @pool.disconnect
       conns.size.should == 4
       @pool.size.should == 1
@@ -575,7 +574,7 @@ describe "A connection pool with multiple servers" do
     conns = []
     @pool.size.should == 1
     @pool.size(:read_only).should == 1
-    @pool.db.meta_def(:disconnect_connection){|c| conns << c}
+    meta_def(@pool.db, :disconnect_connection){|c| conns << c}
     @pool.disconnect
     conns.sort.should == %w'default1 read_only1'
     @pool.size.should == 0
@@ -923,13 +922,13 @@ shared_examples_for "All connection pools classes" do
   
   specify "should call the disconnection_proc option if the hold block raises a DatabaseDisconnectError" do
     x = nil
-    proc{c = @class.new(mock_db.call(proc{|c| x = c}){123}).hold{raise Sequel::DatabaseDisconnectError}}.should raise_error(Sequel::DatabaseDisconnectError)
+    proc{@class.new(mock_db.call(proc{|c| x = c}){123}).hold{raise Sequel::DatabaseDisconnectError}}.should raise_error(Sequel::DatabaseDisconnectError)
     x.should == 123
   end
   
   specify "should have a disconnect method that disconnects the connection" do
     x = nil
-    c = @class.new(mock_db.call(proc{|c| x = c}){123})
+    c = @class.new(mock_db.call(proc{|c1| x = c1}){123})
     c.hold{}
     x.should == nil
     c.disconnect

@@ -11,25 +11,17 @@ module Sequel
   #                        a per instance basis via the :client_min_messages option.
   # force_standard_strings :: Set to false to not force the use of standard strings.  Overridable
   #                           on a per instance basis via the :force_standard_strings option.
-  # use_iso_date_format :: (only available when using the native adapter)
-  #                        Set to false to not change the date format to
-  #                        ISO.  This disables one of Sequel's optimizations.
   #
-  # Changes in these settings only affect future connections.  To make
-  # sure that they are applied, they should generally be called right
-  # after the Database object is instantiated and before a connection
-  # is actually made. For example, to use whatever the server defaults are:
+  # It is not recommened you use these module-level accessors.  Instead,
+  # use the database option to make the setting per-Database.
   #
-  #   DB = Sequel.postgres(...)
-  #   Sequel::Postgres.client_min_messages = nil
-  #   Sequel::Postgres.force_standard_strings = false
-  #   Sequel::Postgres.use_iso_date_format = false
-  #   # A connection to the server is not made until here
-  #   DB[:t].all
+  # All adapters that connect to PostgreSQL support the following option in
+  # addition to those mentioned above:
   #
-  # The reason they can't be done earlier is that the Sequel::Postgres
-  # module is not loaded until a Database object which uses PostgreSQL
-  # is created.
+  # :search_path :: Set the schema search_path for this Database's connections.
+  #                 Allows to to set which schemas do not need explicit
+  #                 qualification, and in which order to check the schemas when
+  #                 an unqualified object is referenced.
   module Postgres
     # Array of exceptions that need to be converted.  JDBC
     # uses NativeExceptions, the native adapter uses PGError.
@@ -155,9 +147,6 @@ module Sequel
       end_sql
       ).strip.gsub(/\s+/, ' ').freeze
 
-      # The Sequel extensions that require reseting of the conversion procs.
-      RESET_PROCS_EXTENSIONS = [:pg_array, :pg_hstore, :pg_inet, :pg_interval, :pg_json, :pg_range].freeze
-
       # A hash of conversion procs, keyed by type integer (oid) and
       # having callable values for the conversion proc for that type.
       attr_reader :conversion_procs
@@ -276,17 +265,6 @@ module Sequel
         self << drop_trigger_sql(table, name, opts)
       end
 
-      # If any of the extensions that require reseting the conversion procs
-      # is loaded, reset them.  This is done here so that if you load
-      # multiple pg_* extensions in the same call, the conversion procs are
-      # only reset once instead of once for every extension.
-      def extension(*exts)
-        super
-        unless (RESET_PROCS_EXTENSIONS & exts).empty?
-          reset_conversion_procs
-        end
-      end
-
       # Return full foreign key information using the pg system tables, including
       # :name, :on_delete, :on_update, and :deferrable entries in the hashes.
       def foreign_key_list(table, opts={})
@@ -379,7 +357,13 @@ module Sequel
       # :server :: The server to which to send the NOTIFY statement, if the sharding support
       #            is being used.
       def notify(channel, opts={})
-        execute_ddl("NOTIFY #{dataset.send(:table_ref, channel)}#{", #{literal(opts[:payload].to_s)}" if opts[:payload]}", opts)
+        sql = "NOTIFY "
+        dataset.send(:identifier_append, sql, channel)
+        if payload = opts[:payload]
+          sql << ", "
+          dataset.literal_append(sql, payload.to_s)
+        end
+        execute_ddl(sql, opts)
       end
 
       # Return primary key for the given table.
@@ -530,6 +514,16 @@ module Sequel
 
       private
 
+      # Do a type name-to-oid lookup using the database and update the procs
+      # with the related proc if the database supports the type.
+      def add_named_conversion_procs(procs, named_procs)
+        unless (named_procs).empty?
+          convert_named_procs_to_procs(named_procs).each do |oid, pr|
+            procs[oid] ||= pr
+          end
+        end
+      end
+
       # Use a PostgreSQL-specific alter table generator
       def alter_table_generator_class
         Postgres::AlterTableGenerator
@@ -596,13 +590,29 @@ module Sequel
         (super || op[:op] == :validate_constraint) && op[:op] != :rename_column
       end
 
+      VALID_CLIENT_MIN_MESSAGES = %w'DEBUG5 DEBUG4 DEBUG3 DEBUG2 DEBUG1 LOG NOTICE WARNING ERROR FATAL PANIC'.freeze
       # The SQL queries to execute when starting a new connection.
       def connection_configuration_sqls
         sqls = []
+
         sqls << "SET standard_conforming_strings = ON" if typecast_value_boolean(@opts.fetch(:force_standard_strings, Postgres.force_standard_strings))
+
         if (cmm = @opts.fetch(:client_min_messages, Postgres.client_min_messages)) && !cmm.to_s.empty?
           sqls << "SET client_min_messages = '#{cmm.to_s.upcase}'"
         end
+
+        if search_path = @opts[:search_path]
+          case search_path
+          when String
+            search_path = search_path.split(",").map{|s| s.strip}
+          when Array
+            # nil
+          else
+            raise Error, "unrecognized value for :search_path option: #{search_path.inspect}"
+          end
+          sqls << "SET search_path = #{search_path.map{|s| "\"#{s.gsub('"', '""')}\""}.join(',')}"
+        end
+
         sqls
       end
 
@@ -620,6 +630,24 @@ module Sequel
           sql
         else
           super
+        end
+      end
+
+      # Convert the hash of named conversion procs into a hash a oid conversion procs. 
+      def convert_named_procs_to_procs(named_procs)
+        h = {}
+        from(:pg_type).where(:typtype=>'b', :typname=>named_procs.keys.map{|t| t.to_s}).select_map([:oid, :typname]).each do |oid, name|
+          h[oid.to_i] = named_procs[name.untaint.to_sym]
+        end
+        h
+      end
+
+      # Copy the conversion procs related to the given oids from PG_TYPES into
+      # the conversion procs for this instance.
+      def copy_conversion_procs(oids)
+        procs = conversion_procs
+        oids.each do |oid|
+          procs[oid] = PG_TYPES[oid]
         end
       end
 
@@ -665,23 +693,23 @@ module Sequel
 
       # SQL for doing fast table output to stdout.
       def copy_table_sql(table, opts)
-         if table.is_a?(String)
-           return table
-         else
-           if opts[:options] || opts[:format]
-             options = " ("
-             options << "FORMAT #{opts[:format]}" if opts[:format]
-             options << "#{', ' if opts[:format]}#{opts[:options]}" if opts[:options]
-             options << ')'
-           end
-           table = if table.is_a?(::Sequel::Dataset)
-             "(#{table.sql})"
-           else
-             literal(table)
-           end
-          return "COPY #{table} TO STDOUT#{options}"
-         end
-       end
+        if table.is_a?(String)
+          table
+        else
+          if opts[:options] || opts[:format]
+            options = " ("
+            options << "FORMAT #{opts[:format]}" if opts[:format]
+            options << "#{', ' if opts[:format]}#{opts[:options]}" if opts[:options]
+            options << ')'
+          end
+          table = if table.is_a?(::Sequel::Dataset)
+            "(#{table.sql})"
+          else
+            literal(table)
+          end
+          "COPY #{table} TO STDOUT#{options}"
+        end
+      end
 
       # SQL statement to create database function.
       def create_function_sql(name, definition, opts={})
@@ -786,11 +814,7 @@ module Sequel
       def get_conversion_procs
         procs = PG_TYPES.dup
         procs[1184] = procs[1114] = method(:to_application_timestamp)
-        unless (pgnt = PG_NAMED_TYPES).empty?
-          from(:pg_type).where(:typtype=>'b', :typname=>pgnt.keys.map{|t| t.to_s}).select_map([:oid, :typname]).each do |oid, name|
-            procs[oid.to_i] ||= pgnt[name.untaint.to_sym]
-          end
-        end
+        add_named_conversion_procs(procs, PG_NAMED_TYPES)
         procs
       end
 
@@ -915,6 +939,8 @@ module Sequel
         m = output_identifier_meth(opts[:dataset])
         ds = metadata_dataset.select(:pg_attribute__attname___name,
             SQL::Cast.new(:pg_attribute__atttypid, :integer).as(:oid),
+            SQL::Cast.new(:basetype__oid, :integer).as(:base_oid),
+            SQL::Function.new(:format_type, :basetype__oid, :pg_type__typtypmod).as(:db_base_type),
             SQL::Function.new(:format_type, :pg_type__oid, :pg_attribute__atttypmod).as(:db_type),
             SQL::Function.new(:pg_get_expr, :pg_attrdef__adbin, :pg_class__oid).as(:default),
             SQL::BooleanExpression.new(:NOT, :pg_attribute__attnotnull).as(:allow_null),
@@ -922,6 +948,7 @@ module Sequel
           from(:pg_class).
           join(:pg_attribute, :attrelid=>:oid).
           join(:pg_type, :oid=>:atttypid).
+          left_outer_join(:pg_type___basetype, :oid=>:typbasetype).
           left_outer_join(:pg_attrdef, :adrelid=>:pg_class__oid, :adnum=>:pg_attribute__attnum).
           left_outer_join(:pg_index, :indrelid=>:pg_class__oid, :indisprimary=>true).
           filter(:pg_attribute__attisdropped=>false).
@@ -930,6 +957,15 @@ module Sequel
           order(:pg_attribute__attnum)
         ds.map do |row|
           row[:default] = nil if blank_object?(row[:default])
+          if row[:base_oid]
+            row[:domain_oid] = row[:oid]
+            row[:oid] = row.delete(:base_oid)
+            row[:db_domain_type] = row[:db_type]
+            row[:db_type] = row.delete(:db_base_type)
+          else
+            row.delete(:base_oid)
+            row.delete(:db_base_type)
+          end
           row[:type] = schema_column_type(row[:db_type])
           [m.call(row.delete(:name)), row]
         end
@@ -1009,7 +1045,6 @@ module Sequel
       FOR_SHARE = ' FOR SHARE'.freeze
       INSERT_CLAUSE_METHODS = Dataset.clause_methods(:insert, %w'insert into columns values returning')
       INSERT_CLAUSE_METHODS_91 = Dataset.clause_methods(:insert, %w'with insert into columns values returning')
-      LOCK = 'LOCK TABLE %s IN %s MODE'.freeze
       NULL = LiteralString.new('NULL').freeze
       PG_TIMESTAMP_FORMAT = "TIMESTAMP '%Y-%m-%d %H:%M:%S".freeze
       QUERY_PLAN = 'QUERY PLAN'.to_sym
@@ -1039,6 +1074,7 @@ module Sequel
       BLOB_RE = /[\000-\037\047\134\177-\377]/n.freeze
       WINDOW = " WINDOW ".freeze
       EMPTY_STRING = ''.freeze
+      LOCK_MODES = ['ACCESS SHARE', 'ROW SHARE', 'ROW EXCLUSIVE', 'SHARE UPDATE EXCLUSIVE', 'SHARE', 'SHARE ROW EXCLUSIVE', 'EXCLUSIVE', 'ACCESS EXCLUSIVE'].each{|s| s.freeze}
 
       # Shared methods for prepared statements when used with PostgreSQL databases.
       module PreparedStatementMethods
@@ -1140,7 +1176,10 @@ module Sequel
         if block_given? # perform locking inside a transaction and yield to block
           @db.transaction(opts){lock(mode, opts); yield}
         else
-          @db.execute(LOCK % [source_list(@opts[:from]), mode], opts) # lock without a transaction
+          sql = 'LOCK TABLE '
+          source_list_append(sql, @opts[:from])
+          sql << " IN #{mode} MODE"
+          @db.execute(sql, opts) # lock without a transaction
         end
         nil
       end

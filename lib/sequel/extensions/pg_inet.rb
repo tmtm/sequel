@@ -11,7 +11,7 @@
 #   DB.extension :pg_inet
 #
 # If you are not using the native postgres adapter, you probably
-# also want to use the typecast_on_load plugin in the model, and
+# also want to use the pg_typecast_on_load plugin in the model, and
 # set it to typecast the inet/cidr column(s) on load.
 #
 # This extension integrates with the pg_array extension.  If you plan
@@ -33,12 +33,15 @@ module Sequel
   module Postgres
     # Methods enabling Database object integration with the inet/cidr types.
     module InetDatabaseMethods
-
       # Reset the conversion procs when extending the Database object, so
       # it will pick up the inet/cidr converter.  Also, extend the datasets
       # with support for literalizing the IPAddr types.
       def self.extended(db)
-        db.extend_datasets(InetDatasetMethods)
+        db.instance_eval do
+          extend_datasets(InetDatasetMethods)
+          copy_conversion_procs([869, 650, 1041, 651, 1040])
+          @schema_type_classes[:ipaddr] = IPAddr
+        end
       end
 
       # Convert an IPAddr arg to a string.  Probably not necessary, but done
@@ -52,16 +55,6 @@ module Sequel
         end
       end
 
-      # Make the column type detection recognize the inet and cidr types.
-      def schema_column_type(db_type)
-        case db_type
-        when 'inet', 'cidr'
-          :ipaddr
-        else
-          super
-        end
-      end
-
       private
 
       # Handle inet[]/cidr[] types in bound variables.
@@ -69,6 +62,16 @@ module Sequel
         case a
         when IPAddr
           "\"#{a.to_s}/#{a.instance_variable_get(:@mask_addr).to_s(2).count('1')}\""
+        else
+          super
+        end
+      end
+
+      # Make the column type detection recognize the inet and cidr types.
+      def schema_column_type(db_type)
+        case db_type
+        when 'inet', 'cidr'
+          :ipaddr
         else
           super
         end

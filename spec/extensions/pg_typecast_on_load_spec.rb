@@ -18,12 +18,17 @@ describe Sequel::Model, "PgTypecastOnLoad plugin" do
     @c.first.refresh.values.should == {:id=>1, :b=>true, :y=>0}
   end
 
+  specify "should not fail if schema oid does not have a related conversion proc" do
+    @c.db_schema[:b][:oid] = 0
+    @c.first.refresh.values.should == {:id=>1, :b=>"t", :y=>0}
+  end
+
   specify "should call the database conversion proc with value when automatically reloading the object on creation via insert_select" do
     @c.dataset.meta_def(:insert_select){|h| insert(h); first}
     @c.create.values.should == {:id=>1, :b=>true, :y=>0}
   end
 
-  specify "should allowing setting columns separately via add_typecast_on_load_columns" do
+  specify "should allowing setting columns separately via add_pg_typecast_on_load_columns" do
     @c = Class.new(Sequel::Model(@db[:items]))
     @c.plugin :pg_typecast_on_load
     @c.first.values.should == {:id=>1, :b=>"t", :y=>"0"}
