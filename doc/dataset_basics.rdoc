@@ -1,28 +1,28 @@
-= Dataset Basics 
+= データセットの基本
 
-== Introduction
+== はじめに
 
-Datasets are the primary way Sequel uses to access the database. While most database libraries have specific support for updating all records or only a single record, Sequel's ability to represent SQL queries themselves as objects is what gives Sequel most of its power.  However, if you haven't been exposed to the dataset concept before, it can be a little disorienting.  This document aims to give a basic introduction to datasets and how to use them.
+データセットはデータベースにアクセスするために Sequel を使用する主な方法です。多くのデータベースライブラリはすべてのレコードの更新やひとつのレコードだけの更新のための固有のサポートを持っています。SQL クエリ自身をオブジェクトとして表するための Sequel の機能は Sequel にそのパワーの多くを与えています。しかし、データセットの概念を事前に知らされていない場合は、少し混乱させられます。このドキュメントはデータセットの基本的な紹介とその使用方法を与えることを目的としています。
 
-== What a Dataset Represents
+== データセットが表すもの
 
-A Dataset can be thought of representing one of two concepts:
+データセットは二つの概念の一つを表すと考えることができます:
 
-* An SQL query
-* An abstract set of rows and some related behavior
+* SQL クエリ
+* 抽象的な行のセットといくつかの関連した振る舞い
 
-The first concept is more easily understood, so you should probably start with that assumption.
+最初の概念は簡単に理解できるので、その仮定で始めたほうが良いでしょう。
 
-== Basics
+== 基本
 
-The most basic dataset is the simple selection of all columns in a table:
+もっとも基本的なデータセットは、テーブル内の全カラムを簡単に選択したものです:
 
   ds = DB[:posts]
   # SELECT * FROM posts
   
-Here, DB represents your Sequel::Database object, and ds is your dataset, with the SQL query it represents below it.
+ここで、DB は Sequel::Database オブジェクトを表します。ds はデータセットです。これはその下の SQL クエリを表しています。
 
-One of the core dataset ideas that should be understood is that datasets use a functional style of modification, in which methods called on the dataset return modified copies of the dataset, they don't modify the dataset themselves:
+理解すべきデータセットのアイデアの核心の一つは、データセットは変更に関数形式を使用するということです。データセット上で呼び出されるメソッドはデータセットの変更されたコピーを返し、データセットそれ自身は変更しません:
 
   ds2 = ds.where(:id=>1)
   ds2
@@ -30,49 +30,49 @@ One of the core dataset ideas that should be understood is that datasets use a f
   ds
   # SELECT * FROM posts
   
-Note how ds itself is not modified.  This is because ds.where returns a modified copy of ds, instead of modifying ds itself.  This makes using datasets both thread safe and easy to chain:
+ds 自身は変更されていないことに注意してください。これは ds.where は、ds 自身を変更するのではなく、ds の変更されたコピーを返すためです。これは、データセットの使用をスレッドセーフにし、連結を簡単にします:
 
-  # Thread safe:
+  # スレッドセーフ:
   100.times do |i|
     Thread.new do
       ds.where(:id=>i).first
     end
   end
   
-  # Easy to chain:
+  # 連結を簡単に:
   ds3 = ds.select(:id, :name).order(:name).where{id < 100}
   # SELECT id, name FROM posts WHERE id < 100 ORDER BY name
 
-Thread safety you don't really need to worry about, but chainability is core to how Sequel is generally used.  Almost all dataset methods that affect the SQL produced return modified copies of the receiving dataset.
+スレッドセーフについてはあまり気にする必要はありませんが、連結可能性は Sequel の一般的な使用方法の核となります。生成される SQL に影響するほとんどすべてのデータセットメソッドは、レシーバーのデータセットの変更されたコピーを返却します。
 
-Another important thing to realize is that dataset methods that return modified datasets do not execute the dataset's code on the database.  Only dataset methods that return or yield results will execute the code on the database:
+他の理解すべき重要なことは、変更されたデータセットを返すデータセットメソッドは、データセットのコードをデータベース上で実行しないということです。結果を返すか yield するデータセットメソッドだけが、データベース上でコードを実行します:
 
-  # No SQL queries sent:
+  # SQL クエリは送られません:
   ds3 = ds.select(:id, :name).order(:name).filter{id < 100}
   
-  # Until you call a method that returns results
+  # 結果を返すメソッド呼び出しを行うまで
   results = ds3.all
   
-One important consequence of this API style is that if you use a method chain that includes both methods that return modified copies and a method that executes the SQL, the method that executes the SQL should generally be the last method in the chain:
+この API 形式の帰結として重要なことは、変更されたコピーと返すメソッドと SQL を実行するメソッドの両方を含むメソッド連結を使用すると、SQL を実行するメソッドは一般に連結の最後のメソッドになります:
 
-  # Good
+  # 良い
   ds.select(:id, :name).order(:name).filter{id < 100}.all
   
-  # Bad
+  # 悪い
   ds.all.select(:id, :name).order(:name).filter{id < 100}
   
-This is because all will return an array of hashes, and select, order, and filter are dataset methods, not array methods.
+これは、all はハッシュの配列を返し、select, order, filter はデータセットメソッドで配列メソッドではないためです。
 
-== Methods
+== メソッド
 
-Most Dataset methods that users will use can be broken down into two types:
+ユーザーが使用するデータセットメソッドの多くは2つのタイプに分類できます:
 
-* Methods that return modified datasets
-* Methods that execute code on the database
+* 変更されたデータセットを返すメソッド
+* データベース上でコードを実行するメソッド
 
-=== Methods that return modified datasets
+=== 変更されたデータセットを返すメソッド
 
-Most dataset methods fall into this category, which can be further broken down by the clause they affect:
+多くのデータセットメソッドはこのカテゴリに含まれます。これはさらに影響する節によって分類されます:
 
 SELECT:: select, select_all, select_append, select_group, select_more
 FROM:: from, from_self
@@ -82,25 +82,25 @@ GROUP:: group, group_by, group_and_count, select_group, ungrouped
 HAVING:: having, filter, exclude, exclude_having, and, or, grep, invert, unfiltered
 ORDER:: order, order_by, order_append, order_prepend, order_more, reverse, reverse_order, unordered
 LIMIT:: limit, unlimited
-compounds:: union, intersect, except
-locking:: for_update, lock_style
-common table expressions:: with, with_recursive
-qualification:: qualify, qualify_to, qualify_to_first_source
-inserting:: set_defaults, set_overrides
-other:: clone, distinct, naked, server, with_sql
+混合:: union, intersect, except
+ロック:: for_update, lock_style
+一般的なテーブル表現:: with, with_recursive
+修飾:: qualify, qualify_to, qualify_to_first_source
+挿入:: set_defaults, set_overrides
+その他:: clone, distinct, naked, server, with_sql
 
-=== Methods that execute code on the database
+=== データベース上でコードを実行するメソッド
 
-Most other dataset methods commonly used will execute the dataset's SQL on the database:
+一般に使用されるその他のデータセットメソッドの多くは、データベース上でデータセットの SQL を実行します:
 
-SELECT (All Records):: all, each, map, to_hash, to_hash_groups, select_map, select_order_map, select_hash, select_hash_groups, to_csv
-SELECT (First Record):: first, last, get, []
-SELECT (Aggregates):: count, avg, max, min, sum, range, interval
+SELECT (全レコード):: all, each, map, to_hash, to_hash_groups, select_map, select_order_map, select_hash, select_hash_groups, to_csv
+SELECT (最初のレコード):: first, last, get, []
+SELECT (集約):: count, avg, max, min, sum, range, interval
 INSERT:: insert, <<, import, multi_insert, insert_multiple
 UPDATE:: update, set, []=
 DELETE:: delete
-other:: columns, columns!, truncate
+その他:: columns, columns!, truncate
 
-=== Other methods
+=== その他のメソッド
 
-See the Sequel::Dataset RDoc for other methods that are less commonly used.
+あまり一般に使用されないその他のメソッドについては Sequel::Dataset RDoc を参照してください。
