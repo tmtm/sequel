@@ -1,61 +1,61 @@
-= Dataset Filtering 
+= データセットフィルタリング
 
-Sequel is very flexibile when it comes to filtering records. You can specify your conditions as a custom string, as a string with parameters, as a hash of values to compare against, or as ruby code that Sequel translates into SQL expressions.
+Sequel はかなり自由にレコードをフィルタリングできます。カスタム文字列として、パラメータつき文字列として、比較用の値のハッシュとして、Sequel が SQL 表現に変換する Ruby コードとして、条件を指定できます。
 
-== Filtering using a custom filter string
+== カスタムフィルタ文字列を使用したフィルタリング
 
-If you wish to write your SQL by hand, you can just supply it to the dataset's #where method:
+SQL を手で書きたい場合は、データセットの #where メソッドを指定できます:
 
   items.where('x < 10').sql
   #=> "SELECT * FROM items WHERE x < 10"
 
-In order to prevent SQL injection, you can replace literal values with question marks and supply the values as additional arguments:
+SQL インジェクションを防ぐために、リテラル値をクエスチョンマークに置き換えて追加引数で値を提供することができます:
 
   items.where('category = ?', 'ruby').sql
   #=> "SELECT * FROM items WHERE category = 'ruby'"
 
-You can also use placeholders with :placeholder and a hash of placeholder values:
+:placeholder とプレースホルダの値のハッシュで、プレースホルダを使用することもできます:
 
   items.where('category = :category', :category=>'ruby').sql
   #=> "SELECT * FROM items WHERE category = 'ruby'"
 
-=== Specifying SQL functions
+=== SQL 関数の記述
 
-Sequel also allows you to specify functions by using the Sequel.function method:
+Sequel は Sequel.function メソッドを使用して関数を指定することができます:
 
   items.literal(Sequel.function(:avg, :price)) #=> "avg(price)"
 
-If you are specifying a filter/selection/order, you can use a virtual row block:
+フィルタ/選択/並び替えを指定する場合、仮想行ブロックを使用できます:
 
   items.select{avg(price)}
 
-You can also use the {core_extensions extension}[link:files/doc/core_extensions_rdoc.html] and the +sql_function+ method:
+{core_extensions extension}[link:files/doc/core_extensions_rdoc.html] と +sql_function+ メソッドを使用できます:
 
   :avg.sql_function(:price)
 
-== Filtering using a hash
+== ハッシュを使用したフィルタリング
 
-If you just need to compare records against values, you can supply a hash:
+レコードを値で比較する必要がある場合、ハッシュを提供できます:
 
   items.where(:category => 'ruby').sql
   #=> "SELECT * FROM items WHERE (category = 'ruby')"
 
-Sequel can check for null values:
+Sequel は null 値をチェックできます:
 
   items.where(:category => nil).sql
   #=> "SELECT * FROM items WHERE (category IS NULL)"
 
-Or compare two columns:
+または2つのカラムを比較できます:
 
   items.where(:x => :some_table__y).sql
   #=> "SELECT * FROM items WHERE (x = some_table.y)"
 
-And also compare against multiple values:
+複数の値で比較することもできます:
 
   items.where(:category => ['ruby', 'perl']).sql
   #=> "SELECT * FROM items WHERE (category IN ('ruby', 'perl'))"
 
-Ranges (both inclusive and exclusive) can also be used:
+範囲(端を含む場合と含まない場合)も使用できます:
 
   items.where(:price => 100..200).sql
   #=> "SELECT * FROM items WHERE (price >= 100 AND price <= 200)"
@@ -63,22 +63,22 @@ Ranges (both inclusive and exclusive) can also be used:
   items.where(:price => 100...200).sql
   #=> "SELECT * FROM items WHERE (price >= 100 AND price < 200)"
 
-== Filtering using an array
+== 配列を使用したフィルタリング
 
-If you need to select multiple items from a dataset, you can supply an array:
+データセットから複数アイテムを選択する必要がある場合、配列で指定できます:
 
 	item_array = [1, 38, 47, 99]
 	items.where(:id => item_array).sql
 	#=> "SELECT * FROM items WHERE (id IN (1, 38, 47, 99))"
 
-== Filtering using expressions
+== 式を使用したフィルタリング
 
-You can pass a block to where, which is evaluated in a special context:
+where にブロックを渡すことができます。ブロックは特殊なコンテキストで評価されます:
 
   items.where{price * 2 < 50}.sql
   #=> "SELECT * FROM items WHERE ((price * 2) < 50) 
 
-This works for the standard inequality and arithmetic operators:
+これは標準的な非等値演算と算術演算で働きます:
 
   items.where{price + 100 < 200}.sql
   #=> "SELECT * FROM items WHERE ((price + 100) < 200) 
@@ -92,7 +92,7 @@ This works for the standard inequality and arithmetic operators:
   items.where{price / 100 >= 200}.sql
   #=> "SELECT * FROM items WHERE ((price / 100) >= 200) 
 
-You use the overloaded bitwise and (&) and or (|) operators to combine expressions:
+式を組み合わせるには、オーバーロードされた論理積(&)と論理和(|)演算を使用します:
 
   items.where{(price + 100 < 200) & (price * 100 <= 200)}.sql
   #=> "SELECT * FROM items WHERE (((price + 100) < 200) AND ((price * 100) <= 200)) 
@@ -100,12 +100,12 @@ You use the overloaded bitwise and (&) and or (|) operators to combine expressio
   items.where{(price - 100 > 200) | (price / 100 >= 200)}.sql
   #=> "SELECT * FROM items WHERE (((price - 100) > 200) OR ((price / 100) >= 200)) 
 
-To filter by equality, you use the standard hash, which can be combined with other expressions using Sequel.& and Sequel.|:
+一致でフィルタするには、標準的なハッシュを使用します。Sequel.& と Sequel.| を使って他の式と組み合わせることもできます:
 
   items.where{Sequel.&({:category => 'ruby'}, (price + 100 < 200))}.sql
   #=> "SELECT * FROM items WHERE ((category = 'ruby') AND ((price + 100) < 200))"
 
-This works with other hash values, such as arrays and ranges:
+これは配列や Range のような他のハッシュ値でも働きます:
 
   items.where{Sequel.|({:category => ['ruby', 'other']}, (:price - 100 > 200))}.sql
   #=> "SELECT * FROM items WHERE ((category IN ('ruby', 'other')) OR ((price - 100) <= 200))"
@@ -113,9 +113,9 @@ This works with other hash values, such as arrays and ranges:
   items.where{Sequel.&({:price => (100..200)}, :active)).sql
   #=> "SELECT * FROM items WHERE ((price >= 100 AND price <= 200) AND active)"
 
-=== Negating conditions
+=== 否定条件
 
-You can use the exclude method to exclude conditions:
+exclude メソッドで条件を除外できます:
 
   items.exclude(:category => 'ruby').sql
   #=> "SELECT * FROM items WHERE (category != 'ruby')"
@@ -126,61 +126,60 @@ You can use the exclude method to exclude conditions:
   items.exclude{price / 100 >= 200}.sql
   #=> "SELECT * FROM items WHERE ((price / 100) < 200) 
 
-=== Comparing against column references
+=== カラム参照の比較
 
-You can also compare against other columns:
+他のカラムと比較することもできます:
 
   items.where{credit > debit}.sql
   #=> "SELECT * FROM items WHERE (credit > debit)
 
-Or against SQL functions:
+SQL 関数との比較もできます:
 
   items.where{price - 100 < max(price)}.sql
   #=> "SELECT * FROM items WHERE ((price - 100) < max(price))"
 
-== String search functions
+== 文字列検索関数
 
-You can search SQL strings using the Sequel.like method:
+Sequel.like メソッドを使用して SQL 文字列を検索できます:
 
   items.where(Sequel.like(:name, 'Acme%')).sql
   #=> "SELECT * FROM items WHERE (name LIKE 'Acme%')"
 
-You can specify a Regexp as a like argument, but this will probably only work
-on PostgreSQL and MySQL:
+like の引数として Regexp を記述できます。ただしこれはおそらく PostgreSQL と MySQL だけで働きます:
 
   items.where(Sequel.like(:name, /Acme.*/)).sql
   #=> "SELECT * FROM items WHERE (name ~ 'Acme.*')"
 
-Like can also take more than one argument:
+like は一つ以上の引数も取ることができます:
 
   items.where(Sequel.like(:name, 'Acme%', /Beta.*/)).sql
   #=> "SELECT * FROM items WHERE ((name LIKE 'Acme%') OR (name ~ 'Beta.*'))"
 
-== String concatenation
+== 文字列結合
 
-You can concatenate SQL strings using Sequel.join: 
+Sequel.join で SQL 文字列を結合できます:
 
   items.where(Sequel.join([:name, :comment]).like('%acme%')).sql
   #=> "SELECT * FROM items WHERE ((name || comment) LIKE 'Acme%')"
 
-Array#sql_string_join also takes a join argument:
+Array#sql_string_join も join 引数を取ります:
 
   items.filter(Sequel.join([:name, :comment], ' ').like('%acme%')).sql
   #=> "SELECT * FROM items WHERE ((name || ' ' || comment) LIKE 'Acme%')"
 
-== Filtering using sub-queries
+== サブクエリを使用したフィルタリング
 
-One of the best features of Sequel is the ability to use datasets as sub-queries. Sub-queries can be very useful for filtering records, and many times provide a simpler alternative to table joins. Sub-queries can be used in all forms of filters:
+Sequel の最良の特徴の一つは、データセットをサブクエリとして使用する機能です。サブクエリはレコードのフィルタリングにとても有用で、テーブル結合のシンプルな代替方法を多く提供します。サブクエリはフィルタの全形式で使用できます:
 
   refs = consumer_refs.where(:logged_in).select(:consumer_id)
   consumers.where(:id => refs).sql
   #=> "SELECT * FROM consumers WHERE (id IN (SELECT consumer_id FROM consumer_refs WHERE logged_in))"
 
-Note that if you are checking for the inclusion of a single column in a subselect, the subselect should only select a single column.
+subselect で一つのカラムを含んでいることをチェックしている場合は、subselect は一つのカラムだけを select することに注意してください。
 
-== Using OR instead of AND
+== AND の代わりの OR の使用
 
-By default, if you chain calls to +where+, the conditions get ANDed together.  If you want to use an OR for a condition, you can use the +or+ method:
+デフォルトでは +where+ を連結すると、条件は AND されます。条件に OR を使用したい場合は、+or+ メソッドを使用できます:
 
   items.where(:name=>'Food').or(:vendor=>1).sql
   #=> "SELECT * FROM items WHERE ((name = 'Food') OR (vendor = 1))"
