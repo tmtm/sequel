@@ -1,9 +1,6 @@
-= Prepared Statements and Bound Variables
+= プリペアドステートメントと変数のバインド
 
-Sequel has support for prepared statements and bound variables.  No matter which
-database you are using, the Sequel prepared statement/bound variable API remains
-the same.  There is native support for prepared statements/bound variables on
-the following adapters:
+Sequel はプリペアドステートメントと変数のバインドをサポートしています。どのデータベースを使用しているかは問題ではなく、Sequel プリペアドステートメント/変数バインド API は同じです。次のアダプタでは、プリペアドステートメント/変数バインドはネイティブサポートです:
 
 * ibmdb (prepared statements only)
 * jdbc
@@ -14,124 +11,97 @@ the following adapters:
 * sqlite
 * tinytds
 
-Support on other adapters is emulated via string interpolation.
+他のアダプだでは文字列補間でエミュレートされます。
 
-You can use the prepared_statements model plugin to automatically use prepared
-statements for some common model actions such as saving or deleting a model
-instance, or looking up a model based on a primary key.
+prepared_statements モデルプラグインを使用すると、いくつかの一般的なモデルアクション(モデルインスタンスの保存や削除、プライマリキーベースのモデルの検索)で自動的にプリペアドステートメントが使用されます。
 
-== Placeholders
+== プレースホルダ
 
-Generally, when using prepared statements (and certainly when using bound
-variables), you need to put placeholders in your SQL to indicate where you
-want your bound arguments to appear.  Database support and syntax vary
-significantly for placeholders (e.g. :name, $1, ?).  Sequel abstracts all of
-that and allows you to specify placeholders by using the :$name format for
-placeholders, e.g.:
+通常、プリペアドステートメントを使用する時は(もちろん変数のバインドを使用する時も)、SQL のどこに引数をバインドしたいかをアダプタに示すためにプレースホルダを置く必要があります。データベースがサポートするプレースホルダの構文はかなり異なります(たとえば :name, $1, ?)。Sequel はすべてを抽象化し、プレースホルダに :$name 形式を使用することで、プレースホルダを記述できます。たとえば:
 
   ds = DB[:items].where(:name=>:$n)
 
-== Bound Variables
+== 変数のバインド
 
-Using bound variables for this query is simple:
+このクエリの変数のバインドの使用はシンプルです:
 
   ds.call(:select, :n=>'Jim')
 
-This will do the equivalent of selecting records that have the name 'Jim'. It
-returns all records, and can take a block that is passed to <tt>Dataset#all</tt>.
+これは name が 'Jim' であるレコードを選択するのと同等のことを行います。すべてのレコードを返却し、<tt>Database#all</tt> に渡すブロックを指定することもできます。
 
-Deleting or returning the first record works similarly:
+削除または最初のレコードの返却は同様に働きます:
 
-  ds.call(:first, :n=>'Jim') # First record with name 'Jim'
-  ds.call(:delete, :n=>'Jim') # Delete records with name 'Jim'
+  ds.call(:first, :n=>'Jim') # name が 'Jim' である最初のレコード
+  ds.call(:delete, :n=>'Jim') # name が 'Jim' であるレコードを削除
 
-For inserting/updating records, you should also specify a value hash, which
-may itself contain placeholders:
+レコードの挿入/更新については、ハッシュ値を指定します。ハッシュはそれ自身がプレースホルダを含みます:
 
-  # Insert record with 'Jim', note that the previous filter is ignored
+  # 'Jim' のレコードを挿入する。以前のフィルタは無視されていることに注意
   ds.call(:insert, {:n=>'Jim'}, :name=>:$n)
-  # Change name to 'Bob' for all records with name of 'Jim'
+  # name が 'Jim' のすべてのレコードについて name を 'Bob' に変更
   ds.call(:update, {:n=>'Jim', :new_n=>'Bob'}, :name=>$:new_n)
 
-== Prepared Statements
+== プリペアドステートメント
 
-Prepared statement support is similar to bound variable support, but you
-use <tt>Dataset#prepare</tt> with a name, and <tt>Dataset#call</tt> or <tt>Database#call</tt> later with the values:
+プリペアドステートメントは変数バインドのサポートと同等ですが、<tt>Database#prepare</tt> に名前を指定して使用し、後で <tt>Database#call</tt> または <tt>Database#call</tt> を値を指定して使用します:
 
   ds = DB[:items].filter(:name=>:$n)
   ps = ds.prepare(:select, :select_by_name)
   ps.call(:n=>'Jim')
-  DB.call(:select_by_name, :n=>'Jim') # same as above
+  DB.call(:select_by_name, :n=>'Jim') # 上と同じ
 
-The <tt>Dataset#prepare</tt> method returns a prepared statement, and also stores a
-copy of the prepared statement in the database for later use.  For insert
-and update queries, the hash to insert/update is passed to +prepare+:
+<tt>Dataset#prepare</tt> メソッドはプリペアドステートメントを返し、後で使用するために、データベース内にプリペアドステートメントのコピーを保存します。挿入と更新クエリでは、挿入/更新のためのハッシュが +prepare+ に渡されます:
 
   ps1 = DB[:items].prepare(:insert, :insert_with_name, :name=>:$n)
   ps1.call(:n=>'Jim')
-  DB.call(:insert_with_name, :n=>'Jim') # same as above
+  DB.call(:insert_with_name, :n=>'Jim') # 上と同じ
   ds = DB[:items].filter(:name=>:$n)
   ps2 = ds.prepare(:update, :update_name, :name=>:$new_n)
   ps2.call(:n=>'Jim', :new_n=>'Bob')
-  DB.call(:update_name, :n=>'Jim', :new_n=>'Bob') # same as above
+  DB.call(:update_name, :n=>'Jim', :new_n=>'Bob') # 上と同じ
 
-== Implementation Issues
+== 実装の問題
 
-Currently, creating a prepared statement uses Object#extend, which can hurt
-performance.  For high performance applications, it's recommended to create
-all of your prepared statements upon application initialization, and not
-to create prepared statements dynamically at runtime.
+現在、プリペアドステートメントの生成は Object#extend を使用しています。これは性能に影響します。高性能アプリケーションについては、アプリケーション初期化時にすべてのプリペアドステートメントを生成することを推奨します。実行時に動的にプリペアドステートメントを生成するのではなく。
 
-== Database support
+== データベースサポート
 
 === PostgreSQL
 
-If you are using the ruby-postgres or postgres-pr driver, PostgreSQL uses the
-default emulated support.  If you are using ruby-pg, there is native support,
-but it may require type specifiers on some old versions (generally not anymore).
-You can add a __* suffix to the placeholder symbol to specify a type, which
-casts to that type in the SQL (e.g.  :$name__text, which will be compiled to
-"$1::text" in the SQL).  Prepared statements are always server side.
+ruby-postgres または postgres-pr ドライバを使用している場合、PostgreSQL はデフォルトエミュレートサポートを使用します。ruby-pg を使用している場合、ネイティブサポートがありますが、いくつかの古いバージョンでは型指定を要求します(通常はもうありません)。
+プレースホルダシンボルに __* サフィックスを追加すると、型を指定できます。これは SQL の型をキャストします(たとえば、:$name__text は SQL の "$1::text" にコンパイルされます)。プリペアドステートメントは常にサーバーサイドを使用します。
 
 === SQLite
 
-SQLite supports both prepared statements and bound variables.  Prepared
-statements are cached per connection.
+SQLite はプリペアドステートメントと変数バインドの両方をサポートします。プリペアドステートメントは接続毎にキャッシュされます。
 
 === MySQL/Mysql2
 
-The MySQL/Mysql2 ruby drivers do not support bound variables, so the bound
-variable methods fall back to string interpolation.  It uses server side
-prepared statements.
+MySQL/Mysql2 Ruby ドライバは変数バインドをサポートしません。変数バインドメソッドは文字列補間にフォールバックします。サーバーサイドのプリペアドステートメントが使用されます。
 
 === JDBC
 
-JDBC supports both prepared statements and bound variables.  Whether these
-are server side or client side depends on the JDBC driver.  For PostgreSQL
-over JDBC, you can add the prepareThreshold=N parameter to the connection
-string, which will use a server side prepared statement after N calls to
-the prepared statement.
+JDBC はプリペアドステートメントと変数バインドの両方をサポートします。
+サーバーサイドとクライアントサイドのどちらかは JDBC ドライバに依存します。
+PostgreSQL over JDBC では、接続文字列に prepareThreshold=N パラメータを追加できます。
+これはプリペアドステートメントが N 回呼び出された後で、サーバーサイドプリペアドステートメントを使用します。
 
 === TinyTDS
 
-Uses the sp_executesql stored procedure with bound variables, since
-Microsoft SQL Server doesn't support true prepared statements.
+Microsoft SQL サーバーは真のプリペアドステートメントをサポートしないため、変数バインドで sp_executesql ストアドプロシジャを使用します。
 
 === IBM_DB
 
-DB2 supports both prepared statements and bound variables.  Prepared
-statement objects are cached per connection.
+DB2 はプリペアドステートメントと変数バインドの両方をサポートします。プリペアドステートメントオブジェクトは接続ごとにキャッシュされます。
 
 === Oracle
 
-Oracle supports both prepared statements and bound variables.  Prepared
-statements (OCI8::Cursor objects) are cached per connection.  If you
-ever plan to use a nil/NULL value as a bound variable/prepared statement
-value, you must specify the type in the placeholder using a __* suffix.
-You can use any of the schema types that Sequel supports, such as
-:$name__string or :$num__integer.  Using blobs as bound variables is
-not currently supported.
+Oracle はプリペアドステートメントと変数バインドの両方をサポートします。
+プリペアドステートメント(OCI8::Cursor オブジェクト)は接続毎にキャッシュされます。
+変数バインド/プリペアドステートメントに nil/NULL 値を使用する予定がなければ、__* サフィックスを使用してプレースホルダ内で型を指定すべきです。
+:$name__string や :$num__integer のような、Sequel がサポートしている任意のスキーマタイプ使用できます。
+blob を変数バインドで使用することは現在サポートされていません。
 
-=== All Others
+=== その他
 
-Support is emulated using interpolation.
+サポートは補間を使用してエミュレートされます。
