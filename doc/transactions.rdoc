@@ -1,31 +1,35 @@
-= Database Transactions 
+= データベーストランザクション
 
-Sequel uses autocommit mode by default for all of its database adapters, so in general in Sequel if you want to use database transactions, you need to be explicit about it.  There are a few cases where transactions are used implicitly by default:
+Sequel はデフォルトではすべてのデータベースアダプタで自動コミットモードを使用します。
+Sequel では通常、データベーストランザクションを使用したい場合は、それを明示する必要があります。
+デフォルトで暗黙的にトランザクションが使用されるケースがいくつかあります:
 
-* Dataset#import to insert many records at once
+* 多くのレコードを一度に挿入するための Dataset#import 
 * Model#save
 * Model#destroy
-* Migrations if the database supports transactional schema
-* A few model plugins
+* データベースがトランザクションスキーマをサポートしている場合のマイグレーション
+* いくつかのモデルプラグイン
 
-Everywhere else, it is up to you to use a database transaction if you want to.
+それ以外では、使用したい時にデータベーストランザクションを使用することができます。
 
-== Basic Transaction Usage
+== 基本的なトランザクションの使用
 
-In Sequel, the <tt>Database#transaction</tt> method should be called if you want to use a database transaction.  This method must be called with a block.  If the block does not raise an exception, the transaction is committed:
+Sequel では、データベーストランザクションを使用したい場合に <tt>Database#transaction</tt> メソッドを呼び出します。
+このメソッドはブロック付きで呼び出す必要があります。
+ブロックが例外を raise しない場合は、トランザクションはコミットされます:
 
   DB.transaction do # BEGIN
     DB[:foo].insert(1) # INSERT
   end # COMMIT
    
-If the block raises a Sequel::Rollback exception, the transaction is rolled back, but no exception is raised outside the block:
+ブロックが Sequel::Rollback 例外を raise した場合は、トランザクションはロールバックします。ブロックの外部には例外は raise されません:
 
   DB.transaction do # BEGIN
     raise Sequel::Rollback
   end # ROLLBACK
   # no exception raised
 
-If any other exception is raised, the transaction is rolled back, and the exception is raised outside the block:
+他の例外が raise した場合は、トランザクションはロールバックし、ブロックの外部にその例外が raise されます:
 
   # ArgumentError raised
   DB.transaction do # BEGIN
@@ -33,29 +37,29 @@ If any other exception is raised, the transaction is rolled back, and the except
   end # ROLLBACK
   # ArgumentError raised
 
-If you want Sequel::Rollback exceptions to be reraised, use the <tt>:rollback => :reraise</tt> option:
+Sequel::Rollback 例外を再 raise したい場合は、<tt>:rollback => :reraise</tt> オプションを使用します:
 
   DB.transaction(:rollback => :reraise) do # BEGIN
     raise Sequel::Rollback
   end # ROLLBACK
   # Sequel::Rollback raised
 
-If you always want to rollback (useful for testing), use the <tt>:rollback => :always</tt> option:
+常にロールバックしたい場合(テストで有用)は、<tt>:rollback => :always</tt> オプションを使用します:
 
   DB.transaction(:rollback => :always) do # BEGIN
     DB[:foo].insert(1) # INSERT
   end # ROLLBACK
 
-If you want to check whether you are currently in a transaction, use the Database#in_transaction? method:
+現在トランザクション内にいるかどうかをチェックしたい場合は、Database#in_transaction? メソッドを使用します:
 
   DB.in_transaction? # false
   DB.transaction do
     DB.in_transaction? # true
   end
 
-== Transaction Hooks
+== トランザクションフック
 
-You can add hooks to an in progress transaction that are called after the transaction commits or rolls back:
+トランザクション処理中で、コミットまたはロールバック後に呼び出したいフックを追加できます:
 
   x = nil
   DB.transaction do
@@ -73,9 +77,9 @@ You can add hooks to an in progress transaction that are called after the transa
   end
   x # 2
 
-== Nested Transaction Calls / Savepoints
+== トランザクション呼び出し/セーブポイント
 
-You can nest calls to transaction, which by default just reuses the existing transaction:
+transaction をネストして呼ぶこともできます。デフォルトでは既存のトランザクションが再利用されます:
 
   DB.transaction do # BEGIN
     DB.transaction do
@@ -83,7 +87,7 @@ You can nest calls to transaction, which by default just reuses the existing tra
     end
   end # COMMIT
 
-You can use the <tt>:savepoint => true</tt> option in the inner transaction to explicitly use a savepoint (if the database supports it):
+transaction 内で <tt>:savepoint => true</tt> オプションを使用して、明示的にセーブポイントを使用することができます(データベースがサポートしている場合):
 
   DB.transaction do # BEGIN
     DB.transaction(:savepoint => true) do # SAVEPOINT
@@ -91,7 +95,7 @@ You can use the <tt>:savepoint => true</tt> option in the inner transaction to e
     end # RELEASE SAVEPOINT
   end # COMMIT
 
-If a Sequel::Rollback exception is raised inside the savepoint block, it will only rollback to the savepoint:
+Sequel::Rollback 例外がセーブポイントブロック内で raise した場合、セーブポイントだけをロールバックします:
 
   DB.transaction do # BEGIN
     DB.transaction(:savepoint => true) do # SAVEPOINT
@@ -100,7 +104,7 @@ If a Sequel::Rollback exception is raised inside the savepoint block, it will on
     # no exception raised
   end # COMMIT
 
-Other exceptions, unless rescued inside the outer transaction block, will rollback the savepoint and the outer transactions, since they are reraised by the transaction code:
+他の例外は、外側の transaction ブロックの内部で rescue されない限り、セーブポイントと外側の transaction がロールバックします。transaction コードによって再 raise されないためです:
 
   DB.transaction do # BEGIN
     DB.transaction(:savepoint => true) do # SAVEPOINT
@@ -109,52 +113,54 @@ Other exceptions, unless rescued inside the outer transaction block, will rollba
   end # ROLLBACK
   # ArgumentError raised
 
-== Prepared Transactions / Two-Phase Commit
+== プリペアドトランザクション / 2フェーズコミット
 
-Sequel supports database prepared transactions on PostgreSQL, MySQL, and H2.  With prepared transactions, at the end of the transaction, the transaction is not immediately committed (it acts like a rollback).  Later, you can call +commit_prepared_transaction+ to commit the transaction or +rollback_prepared_transaction+ to roll the transaction back.  Prepared transactions are usually used with distributed databases to make sure all databases commit the same transaction or none of them do.
+Sequel は、PostgreSQL, MySQL, H2 でデータベースプリペアドトランザクションをサポートします。プリペアドトランザクションでは、トランザクションの最後でトランザクションはすぐにはコミットされません(ロールバックの動きに似ています)。その後、+commit_prepared_transaction+ を呼び出すとトランザクションがコミットされます。+rollback_prepared_transaction+ でトランザクションがロールバックされます。プリペアドトランザクションは通常は分散データベースで、同じトランザクションがすべてのデータベースでコミットするかしないかを確実にするために使用されます。
 
-To use prepared transactions in Sequel, you provide a string as the value of the :prepare option:
+Sequel でプリペアドトランザクションを使用するには、:prepare オプションの値に文字列を与えます:
 
   DB.transaction(:prepare => 'foo') do # BEGIN
     DB[:foo].insert(1) # INSERT
   end # PREPARE TRANSACTION 'foo'
    
-Later, you can commit the prepared transaction:
+あとで、プリペアドトランザクションをコミットできます:
 
   DB.commit_prepared_transaction('foo')
 
-or roll the prepared transaction back:
+またはプリペアドトランザクションをロールバックできます:
 
   DB.rollback_prepared_transaction('foo')
 
-== Transaction Isolation Levels
+== トランザクション分離レベル
 
-The SQL standard supports 4 isolation levels: READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, and SERIALIZABLE.  Not all databases implement the levels as specified in the standard (or implement the levels at all), but on PostgreSQL, MySQL, and Microsoft SQL Server, you can specify which transaction isolation level you want to use via the :isolation option to <tt>Database#transaction</tt>.  The isolation level is specified as one of the following symbols: :uncommitted, :committed, :repeatable, and :serializable.  Using this option make Sequel use the correct transaction isolation syntax for your database:
+SQL 標準は４つの分離レベルをサポートします: READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE。
+すべてのデータベースが標準に記述されたレベルを実装しているわけではありませんが、PostgreSQL, MySQL, Microsoft SQL Server では、<tt>Database#transaction</tt> に :isolation オプションで使用したいトランザクション分離レベルを指定することができます。
+分離レベルは :uncommitted, :committed, :repeatable, :serializable のいずれかで指定できます。
+このオプションを使用すると、Sequel はあなたのデータベース用の正しいトランザクション分離構文を使用します:
 
   DB.transaction(:isolation => :serializable) do # BEGIN
     # SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
     DB[:foo].insert(1) # INSERT
   end # COMMIT
 
-== Automatically Restarting Transactions
+== トランザクションを自動的にリスタート
 
-Sequel offers the ability to automatically restart transactions if specific types of errors are detected.  For example, if you want to automatically restart a transaction if a serialization failure is detected:
+Sequel は、特定の種類のエラーが検出された場合に、トランザクションを自動的にリスタートする機能を提供します。たとえば、シリアライズ失敗を検出した時に自動的にトランザクションをリスタートしたい場合:
 
   DB.transaction(:isolation => :serializable, :retry_on=>[Sequel::SerializationFailure]) do
     ModelClass.find_or_create(:name=>'Foo')
   end
 
-At the serializable transaction isolation level, find_or_create may raises a Sequel::SerializationFailure exception if multiple threads simultaneously run that code.  With the :retry_on option set, the transaction will be automatically retried until it succeeds.
+serializable トランザクション分離レベルでは、find_or_create は複数のスレッドが同時にコードを実行すると、Sequel::SerializationFailure 例外を raise する場合があります。
+:retry_on オプションを設定すると、トランザクションは成功するまで自動的にリスタートします。
 
-Note that automatic retrying should not be used unless the entire transaction
-block is idempotent, as otherwise it can cause non-idempotent
-behavior to execute multiple times.  For example, with the following code:
+注意: 自動リスタートはトランザクションブロック全体がべき等でないと使用すべきではありません。そうしないと、べき等でない振る舞いは複数回実行されてしまいます。たとえば、次のコードでは:
 
   DB.transaction(:isolation => :serializable, :retry_on=>[Sequel::SerializationFailure]) do
     logger.info 'Ensuring existence of ModelClass with name Foo'
     ModelClass.find_or_create(:name=>'Foo')
   end
 
-The logger.info method will be called multiple times if there is a serialization failure.
+シリアライズが失敗した場合 logger.info メソッドが複数回呼ばれます。
 
-The :num_retries option can be used to set the maxmimum number of times to retry.  It is set to 5 times by default.
+:num_retries オプションで最大リトライ回数を設定できます。デフォルトでは5回に設定されています。
