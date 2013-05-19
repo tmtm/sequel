@@ -1,41 +1,33 @@
-= Virtual Row Blocks
+= 仮想行ブロック
 
-Dataset methods where, order, and select all take blocks that are referred to as
-virtual row blocks.  Many other dataset methods pass the blocks
-they are given into one of those three methods, so there are actually
-many Sequel::Dataset methods that take virtual row blocks.
+データセットのメソッド where, order, select はすべて仮想行ブロックとして参照されるブロックを受け取ります。
+他の多くのデータセットメソッドは、この3つのメソッドの一つに与えられるブロックを渡します。そのため実際には多くの Sequel::Dataset は仮想行ブロックを受け取ります。
 
-== Why Virtual Rows
+== 何故仮想行か
 
-Virtual Rows were created to work around the issue that some parts of
-Sequel's standard DSL could not be used on ruby 1.9.  For example, the
-following Sequel code works on ruby 1.8, but not ruby 1.9:
+仮想行は、Sequel 標準 DSL の一部が Ruby 1.9 で使用できなくなった問題を回避するために作られました。
+たとえば、次の Sequel コードは Ruby 1.8 では動作しますが、1.9 では動作しません:
 
   dataset.where(:a > :b[:c])
   # WHERE a > b(c)
   
-This code does not work on ruby 1.9 for two reasons.  First, Symbol#>
-(like other inequality methods) is already defined in ruby 1.9, so Sequel
-does not override it to return an SQL inequality expression.  Second, Symbol#[]
-is already defined on ruby 1.9, so Sequel does not override it to return an
-SQL function expression.
+このコードは2つの理由のため、Ruby 1.9 で動作しません。ひとつは Symbol#> (他の不等号メソッドも) は Ruby 1.9 で既に定義されています。そのため Sequel は SQL 不等式を返すようにオーバーライドしません。
+次に、Symbol#[] は既に Ruby 1.9 で既に定義されています。そのため Sequel は SQL 関数式を返すようにオーバーライドしません。
 
-It's possible to use Sequel's DSL to represent such expressions, but it is a
-little verbose:
+このような式を表現するために Sequel の DSL を使用できます。しかしこれは少し冗長です:
 
   dataset.where(Sequel.expr(:a) > Sequel.function(:b, :c))
   # WHERE a > b(c)
 
-The virtual row DSL makes such code more concise:
+仮想行 DSL はこのコードをより簡潔にします:
 
   dataset.where{a > b(c)}
 
-== Regular Procs vs Instance Evaled Procs
+== 通常の proc vs instance evaled proc
 
-Virtual row blocks behave differently depending on whether the block accepts
-an argument.  If the block accepts an argument, it is called with an instance
-of Sequel::SQL::VirtualRow.  If it does not accept an argument, it is
-evaluated in the context of an instance of Sequel::SQL::VirtualRow.
+仮想行ブロックはブロックが引数を受け付けるかどうかによって異なった振る舞いをします。
+ブロックが引数を受け付けるときは、Sequel::SQL::VirtualRow のインスタンスで呼ばれます。
+引数を受け付けないときは、Sequel::SQL::VirtualRow のインスタンスの文脈で評価されます。
 
   ds = DB[:items]
   # Regular proc
@@ -46,20 +38,18 @@ evaluated in the context of an instance of Sequel::SQL::VirtualRow.
   ds.where{column > 1}
   # WHERE column > 1
   
-If you aren't familiar with the difference between regular blocks and instance
-evaled blocks, you should probably consult a general ruby reference, but briefly,
-with regular procs, methods called without an explicit receiver inside the
-proc call the method on the receiver in the surrounding scope, while instance
-evaled procs call the method on the receiver of the instance_eval call.  However,
-in both cases, local variables available in the surrounding scope will be available
-inside the proc.  If that doesn't make sense, maybe this example will help:
+通常のブロックと instance evaled ブロックとの違いをよく知らない場合は、おそらく一般的な Ruby リファレンスについて調べるべきです。
+簡単にいうと通常の proc では、明示的なレシーバーなしで呼ばれた proc 内部のメソッドは、スコープを囲んでいるレシーバー上のメソッドを呼びます。
+instance evaled proc は instance_eval 呼び出しのレシーバー上のメソッドを呼びます。
+しかし両方のケースで、スコープの周りで有効なローカル変数は、proc 内部でも有効です。
+わからない場合は、次の例が助けになるかもしれません:
 
   def self.a
     42
   end
   b = 32
   
-  # Regular proc
+  # 通常の proc
   ds.where{|o| o.c > a - b}
   # WHERE c > 10
   
@@ -67,117 +57,95 @@ inside the proc.  If that doesn't make sense, maybe this example will help:
   ds.where{c > a - b}
   # WHERE c > (a - 32)
   
-There are two related differences here.  First is the usage of <tt>o.c</tt> vs +c+,
-and second is the difference between the the use of +a+.  In the regular proc,
-you couldn't call +c+ without an explicit receiver in the proc, unless the self of the
-surrounding scope responded to it.  For +a+, note how ruby calls the method on
-the receiver of the surrounding scope in the regular proc, which returns an integer,
-and does the subtraction before Sequel gets access to it.  In the instance evaled
-proc, calling +a+ without a receiver calls the a method on the VirtualRow instance.
-For +b+, note that it operates the same in both cases, as it is a local variable.
+ここには2つの関係した違いがあります。最初は <tt>o.c</tt> と +c+ の使用法で、次は +a+ の使用の違いです。
+通常の proc では、スコープの周りの self が +c+ に応答しない場合は、明示的なレシーバーなしで proc 内で +c+ を呼ぶことはできません。
++a+ については、通常の proc ではスコープの周りのレシーバー上のメソッドを呼び出し、整数を返し、Sequel がアクセスする前に引き算が行われます。
+instance eval proc では、レシーバーなしの +a+ 呼び出しは、VirtualRow インスタンスの a メソッドを呼び出します。
++b+ については、両方のケースでローカル変数として同じように処理されます。
 
-Basically, the choice for whether to use a regular proc or an instance evaled proc is
-completely up to you.  The same things can be accomplished with both.
-Instance evaled procs tend to produce shorter code, but by modifying the scope
-can be more difficult for a new user to understand.  That being said, I usually
-use instance evaled procs unless I need to call methods on the receiver of the
-surrounding scope inside the proc.
+基本的に、通常の proc か instance evaled proc を使用するかどうかの選択は、完全にあなた次第です。
+どちらでも同じ事ができます。
+instance evaled proc はコードを短くするのに役立ちますが、スコープを変更することは新しいユーザーが理解することを難しくしてしまいます。
+しかし、私は proc 内部のスコープを囲むレシーバー上でメソッドを呼び出す必要がない場合は、通常は instance evaled proc を使用します。
 
-== Local Variables vs Method Calls
+== ローカル変数 vs メソッド呼び出し
 
-If you have a method that accepts 0 arguments and has the same name as a local
-variable, you can call it with () to differentiate the method call from the
-local variable access.  This is mostly useful in instance_evaled procs:
+引数が 0 個のメソッドと同じ名前のローカル変数がある場合、メソッド呼び出しをローカル変数と区別するために () 付きで呼び出すことができます:
 
   b = 32
   ds.where{b() > b}
   # WHERE b > 32
 
-== VirtualRow Methods
+== VirtualRow メソッド
 
-VirtualRow is a class that returns SQL::Identifiers, SQL::QualifiedIdentifiers,
-SQL::Functions, or SQL::WindowFunctions depending on how it is called.
+VirtualRow は、呼び出し方によって SQL::Identifiers, SQL::QualifiedIdentifiers, SQL::Functions, SQL::WindowFunctions を返すクラスです。
 
-== SQL::Identifiers - Regular columns
+== SQL::Identifiers - 通常のカラム
 
-SQL::Identifiers can be thought of as regular column references in SQL,
-not qualified by any table. You get an SQL::Identifier if the method is called
-without a block or arguments, and doesn't have a double underscore in the method
-name:
+SQL::Identifiers はテーブルで修飾されていない SQL の通常のカラム参照と考えることができます。
+ブロックや引数なしで、メソッド名に二重アンダースコアがないメソッドが呼ばれた場合 SQL::Identifier を得ます:
 
   ds.where{|o| o.column > 1}
   ds.where{column > 1}
   # WHERE column > 1
   
-== SQL::QualifiedIdentifiers - Qualified columns
+== SQL::QualifiedIdentifiers - 修飾されたカラム
 
-SQL::QualifiedIdentifiers can be thought of as column references in SQL that
-are qualified to a specific table.  You get an SQL::QualifiedIdentifier if
-the method is called without a block or arguments, and has a double underscore
-in the method name:
+SQL::QualifiedIdentifiers は特定のテーブルで修飾された SQL のカラム参照と考えることができます。
+ブロックや引数なしで、メソッド名に二重アンダースコアがあるメソッドが呼ばれた場合 SQL::QualifiedIdentifier を得ます:
 
   ds.where{|o| o.table__column > 1}
   ds.where{table__column > 1}
   # WHERE table.column > 1
 
-Using the double underscore for SQL::QualifiedIdentifiers was done to make
-usage very similar to using symbols, which also translate the double underscore
-into a qualified column.
+SQL::QualifiedIdentifiers の二重アンダースコアの使用は、シンボルの使用ととても似た使用法で行われます。
+これは二重アンダースコアを修飾されたカラムへの変換も行います。
 
-== SQL::Functions - SQL function calls
+== SQL::Functions - SQL 関数呼び出し
 
-SQL::Functions can be thought of as function calls in SQL.  You get a simple
-function call if you call a method with arguments and without a block:
+SQL::Functions は SQL の関数呼び出しと考えることができます。
+引数つきでブロックなしでメソッドを呼び出す場合、簡単な関数呼び出しを得ます:
 
   ds.where{|o| o.function(1) > 1}
   ds.where{function(1) > 1}
   # WHERE function(1) > 1
   
-To call a SQL function with multiple arguments, just use those arguments in
-your function call:
+複数の引数を持つ SQL 関数を呼び出すには、関数呼び出しの中でそれらの引数を使用するだけです:
   
   ds.where{|o| o.function(1, o.a) > 1}
   ds.where{function(1, a) > 1}
   # WHERE function(1, a) > 1
 
-If the SQL function does not accept any arguments, you need to provide an empty
-block to the method to distinguish it from a call that will produce an
-SQL::Identifier:
+SQL 関数が引数を持たない場合は、SQL::Identifier の呼び出しと区別するために、空ブロックをメソッドに渡す必要があります:
 
   ds.select{|o| o.version{}}
   ds.select{version{}}
   # SELECT version()
   
-To use the SQL wildcard (*) as the sole argument in a function call (most often
-used with the count function), you should provide :* as the sole argument to
-the method, and provide an empty block to the method:
+関数呼び出しで、一つの引数として SQL ワイルドカード (*) を使用するには(count 関数で一番良く使われます)、:* をメソッドの引数として渡し、空ブロックをメソッドに渡します:
   
   ds.select{|o| o.count(:*){}}
   ds.select{count(:*){}}
   # SELECT count(*)
 
-To append the DISTINCT keyword before the method arguments, you need to make
-:distinct the first argument of the method call, and provide an empty block to
-the method:
+メソッド引数の前に DISTINCT キーワードを追加するには、:distinct をメソッドの最初に引数とし、空ブロックをメソッドに渡します:
 
   ds.select{|o| o.count(:distinct, o.col1){}}
   ds.select{count(:distinct, col1){}}
   # SELECT count(DISTINCT col1)
   
-To use multiple columns with the DISTINCT keyword, use multiple arguments in
-the method call:
+DISTINCT キーワードつきで複数カラムを使用するには、メソッド呼び出しで複数引数を使用します:
 
   ds.select{|o| o.count(:distinct, o.col1, o.col2){}}
   ds.select{count(:distinct, col1, col2){}}
   # SELECT count(DISTINCT col1, col2)
   
-== SQL::WindowFunctions - SQL window function calls
+== SQL::WindowFunctions - SQL ウィンドウ関数呼び出し
 
-SQL::WindowFunctions can be thought of as calls to SQL window functions.  Not
-all databases support them, but they are very helpful for certain types of
-queries.  To use them, you need to make :over the first argument of the method
-call, with an optional hash as the second argument, and provide an empty block
-to the method. Here are some examples of use:
+SQL::WindowFunctions は SQL ウィンドウ関数呼び出しと考えることができます。
+すべてのデータベースがサポートするわけではありませんが、クエリの種類によってはとても助けになります。
+これを使用するには、メソッド呼び出しの最初の引数を :over にし、二番目の引数はオプションのハッシュで、空ブロックをメソッドに渡します。
+使用方法の例を示します:
 
   ds.select{|o| o.rank(:over){}}
   ds.select{rank(:over){}}
@@ -191,90 +159,79 @@ to the method. Here are some examples of use:
   ds.select{sum(:over, :args=>col1, :partition=>col2, :order=>col3){}}
   # SELECT sum(col1) OVER (PARTITION BY col2 ORDER BY col3)
 
-== Operators
+== 演算子
 
-VirtualRows use method_missing to handle almost all method calls.  However, they
-have special handling of some operator methods to make certain things easier. The
-operators all use a prefix form.
+VirtualRows は method_missing を使用してほとんどすべてのメソッド呼び出しを操作しています。
+しかし簡単にするためにいくつかの演算子メソッドで特殊な操作があります。
+演算子はすべて prefix 形式を使用します。
 
-=== Math Operators
+=== 数学演算子
 
-The standard +, -, *, and / mathematical operators are defined:
+標準の  +, -, *, / 数学演算子が定義されています:
 
   ds.select{|o| o.-(1, o.a).as(b)}
   ds.select{self.-(1, a).as(b)}
   # SELECT (1 - a) AS b
 
-=== Boolean Operators
+=== 論理演算子
 
-The & and | methods are defined to use AND and OR:
+& と | メソッドは AND と OR を使用するために定義されています:
 
   ds.where{|o| o.&({:a=>:b}, :c)}
   ds.where{self.&({:a=>:b}, :c)}
   # WHERE ((a = b) AND c)
 
-The ~ method is defined to do inversion:
+~ メソッドは反転のために定義されています:
 
   ds.where{|o| o.~({:a=>1, :b=>2})}
   ds.where{self.~({:a=>1, :b=>2})}
   # WHERE ((a != 1) OR (b != 2))
 
-=== Inequality Operators
+=== 不等演算子
 
-The standard >, <, >=, and <= inequality operators are defined:
+標準の >, <, >=, <= 不等演算子が定義されています:
 
   ds.where{|o| o.>(1, :c)}
   ds.where{self.>(1, :c)}
   # WHERE (1 > c)
 
-== Literal Strings
+== リテラル文字列
 
-The backtick operator can be used inside an instance-evaled
-virtual row block to create a literal string:
+バッククォート演算子は instance-evaled 仮想行ブロック内で、リテラル文字列を生成するために使用されます:
 
   ds.where{a > `some SQL`}
   # WHERE (a > some SQL)
 
-You can use this on a regular virtual row block too, but it
-doesn't look as nice:
+通常の仮想行ブロックでこれを使用することもできますが、見た目がよくありません:
 
   ds.where{|o| o.>(:a, o.`('some SQL')}
 
-== Returning multiple values
+== 複数値の返却
 
-It's common when using select and order virtual row blocks to want to
-return multiple values.  If you want to do that, you just need to return a single
-array:
+select と order を使用する時に、仮想行ブロックに複数値を返させたいことは珍しくありません。
+これを行いたい場合は、ひとつの配列を返す必要があります:
 
   ds.select{|o| [o.column1, o.sum(o.column2).as(o.sum)]}
   ds.select{[column1, sum(column2).as(sum)]}
   # SELECT column1, sum(column2) AS sum
   
-Note that if you forget the array brackets, you'll end up with a syntax error:
+注意: 配列の括弧を忘れると構文エラーになります:
 
   # Invalid ruby syntax
   ds.select{|o| o.column1, o.sum(o.column2).as(o.sum)}
   ds.select{column1, sum(column2).as(sum)}
   
-== Alternative Description of the VirtualRow method call rules
+== VirtualRow メソッド呼び出しルールの別の説明
 
-* If a block is given:
-  * The block is currently not called.  This may change in a future version.
-  * If there are no arguments, an SQL::Function with the name of
-    method used, and no arguments.
-  * If the first argument is :*, an SQL::Function is created with a single
-    wildcard argument (*).
-  * If the first argument is :distinct, an SQL::Function is created with
-    the keyword DISTINCT prefacing all remaining arguments.
-  * If the first argument is :over, the second argument if provided should
-    be a hash of options to pass to SQL::Window.  The options hash can also
-    contain :*=>true to use a wildcard argument as the function argument, or
-    :args=>... to specify an array of arguments to use as the function arguments.
-* If a block is not given:
-  * If there are arguments, an SQL::Function is returned with the
-    name of the method used and the arguments given.
-  * If there are no arguments and the method contains a double
-    underscore, split on the double underscore and return an
-    SQL::QualifiedIdentifier with the table and column.
-  * Otherwise, create an SQL::Identifier with the name of the
-    method.
+* ブロックが与えられた場合:
+  * ブロックは現在呼び出されません。これは将来のバージョンで変更されるかもしれません。
+  * 引数がない場合、メソッド名つきの SQL::Function が引数なしで使用されます。
+  * 最初の引数が :* の場合、SQL::Function はワイルドカード引数(*)で生成されます。
+  * 最初の引数が :distinct の場合、残りのすべての引数の前にキーワード DISTINCT がついて SQL::Function が生成されます。
+  * 最初の引数が :over の場合、二番目の引数は SQL::Window に渡されるオプションのハッシュです。
+    オプションハッシュは、関数引数としてワイルドカード引数を使用するために :*=>true を含むことができます。
+    関数引数として使用するための引数の配列を指定するために :args=>...  を含むことができます。
+* ブロックが与えられない場合:
+  * 引数がある場合、使用されるメソッド名と与えられた引数の SQL::Function が返ります。
+  * 引数がなくてメソッドが二重アンダースコアを含んでいる場合、二重アンダースコアで分割し、テーブルとカラムで SQL::QualifiedIdentifier が返ります。
+  * それ以外は、メソッド名の SQL::Identifier が生成されます。
