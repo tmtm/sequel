@@ -1,12 +1,16 @@
-= Testing with Sequel
+= Sequel でのテスト
 
-Whether or not you use Sequel in your application, you are usually going to want to have tests that ensure that your code works.  When you are using Sequel, it's helpful to integrate it into your testing framework, and it's generally best to run each test in its own transaction if possible.  That keeps all tests isolated from each other, and it's simple as it handles all of the cleanup for you.  Sequel doesn't ship with helpers for common libraries, as the exact code you need is often application-specific, but this page offers some examples that you can either use directly or build on.
+アプリケーションで Sequel を使うかどうかにかかわらず、通常はコードが動作することを検証するテストを持ちたいでしょう。
+Sequel を使用する時、テスティングフレームワークに統合する助けになり、可能であればトランザクションの各テストを実行するためにそれは最良です。
+これはすべてのテストを各々分離し、クリーンアップのすべてを処理することでシンプルに保ちます。
+Sequel は一般ライブラリのためのヘルパーは含みません。必要とする正確なコードは通常はアプリケーション特有ですが、このページは直接使用したり組み上げることができるいくつかの例を提供します。
 
-== Transactional tests
+== トランザクションテスト
 
-These run each test in its own transaction, the recommended way to test.
+それ自身のトランザクションの各テストを実行します。テストに推奨される方法です。
 
-Make sure you are using Sequel 3.29.0 or above when using these examples, as older versions don't support the <tt>:rollback=>:always</tt> option.
+これらの例を使用する場合は Sequel 3.29.0 以上を使用してください。
+古いバージョンは <tt>:rollback=>:always</tt> オプションをサポートしていません。
 
 === RSpec 1
 
@@ -89,21 +93,27 @@ Make sure you are using Sequel 3.29.0 or above when using these examples, as old
     end
   end
 
-== Transactional testing with multiple databases
+== 複数データベースでのトランザクションテスト
 
-You can use the Sequel.transaction method to run a transaction on multiple databases, rolling all of them back.  Instead of:
+Sequel.transaction メソッドを使用して、複数データベース上でトランザクションを動かし、すべてをロールバックすることができます。
+次の代わりに:
 
   Sequel::Model.db.transaction(:rollback=>:always)
 
-Use Sequel.transaction with an array of databases:
+データベースの配列で Sequel.transaction を使用します:
 
   Sequel.transaction([DB1, DB2, DB3], :rollback=>:always)
 
-== Nontransactional tests
+== 非トランザクションテスト
 
-In some cases, it is not possible to use transactions.  For example, if you are testing a web application that is running in a separate process, you don't have access to that process's database connections, so you can't run your examples in transactions.  In that case, the best way to handle things is to cleanup after each test by deleting or truncating the database tables used in the test.
+場合によってはトランザクションを使用できないことがあります。
+たとえば、別のプロセスで実行される Web アプリケーションをテストしている場合、そのプロセスのデータベース接続にアクセスできないため、トランザクション内で examples を実行できません。
+この場合、これを処理する最良の方法は、各テストの後で delete か truncate で、テストに使用したデータベーステーブルをクリーンアップすることです。
 
-The order in which you delete/truncate the tables is important if you are using referential integrity in your database (which you probably should be doing).  If you are using referential integrity, you need to make sure to delete in tables referencing other tables before the tables that are being referenced.  For example, if you have an +albums+ table with an +artist_id+ field referencing the +artists+ table, you want to delete/truncate the +albums+ table before the +artists+ table.  Note that if you have cyclic references in your database, you will probably need to write your own custom cleaning code.
+データベースの参照制約を使用している場合、テーブルの delete/truncate をする順序は重要です。
+参照制約を使用している場合、参照されるテーブルよりも前に他のテーブルを参照しているテーブルを delete する必要があります。
+たとえば、+artists+ テーブルを参照する +artist_id+ フィールドを伴う +albums+ テーブルを持っている場合、+artists+ テーブルの前に +albums+ テーブルを delete/truncate したいでしょう。
+データベースに循環参照を含む場合、自身でカスタムクリーニングコードを書く必要があるだろうことに注意してください。
 
 === RSpec
 
@@ -128,29 +138,39 @@ The order in which you delete/truncate the tables is important if you are using 
 
 = Testing Sequel Itself
 
-Sequel has multiple separate test suites.  All test suites run under either RSpec 1 or RSpec 2.
+Sequel は複数に別れたテストスイートを持ちます。すべてのテストスイートは RSpec 1 または RSpec 2 のどちらでも動作します。
 
 == rake spec
 
-The +spec+ rake task (which is also the default rake task) runs Sequel's core and model specs.  These specs use a mocked database connection, and test for specific SQL used and for generally correct behavior.
++spec+ rake タスク(デフォルト rake タスクも)は Sequel のコアとモデル spec を実行します。
+これらの spec はモックデータベース接続を使用し、特定の SQL を使用したテストと、通常の正しい振る舞いのテストを行います。
 
 == rake spec_plugin
 
-The +spec_plugin+ rake task runs the specs for the plugins and extensions that ship with Sequel.  These also use a mocked database connection, and operate very similarly to the general Sequel core and model specs.
++spec_plugin+ rake タスクは Sequel に含まれるプラグインと拡張の sepc を実行します。
+これらもモックデータベース接続を使用し、一般的な Sequel コアとモデル spec にとても似た操作をします。
 
-== rake spec_<i>adapter</i> (e.g. rake spec_postgres)
+== rake spec_<i>adapter</i> (例えば rake spec_postgres)
 
-The <tt>spec_<i>adapter</i></tt> specs run against a real database connection with nothing mocked, and test for correct results.  They are slower than the standard specs, but they will catch errors that are mocked out by the default specs, as well as show issues that only occur on a certain database, adapter, or a combination of the two.
+<tt>spec_<i>adapter</i></tt> spec はモックではなく実際のデータベース接続に対して実行し、正しい結果をテストします。
+これは標準的な spec よりも遅いですが、デフォルトの spec ではモックアウトされるようなエラーを補足します。
+いくつかのデータベース、アダプタ、またはその２つの組み合わせ上でだけ発生する問題を見ることができます。
 
-These specs are broken down into two parts.  For each database, there are specific specs that only apply to that database, and these are called the adapter specs.  There are also shared specs that apply to all (or almost all) databases, these are called the integration specs.
+これらの spec は2つのペアにブレークダウンされます。
+各データベースについて、データベースに適用するだけの特殊な spec があります。これらはアダプタ spec (adapter spec)と呼ばれます。
+すべての(またはほとんどすべての)データベースに適用される共有 spec もあります。
+これらは統合 spec (integration spec)と呼ばれます。
 
-== Environment variables
+== 環境変数
 
-Sequel often uses environment variables when testing to specify either the database to be tested or specify how testing should be done.  You can also specify the databases to test by copying spec/spec_config.rb.example to spec/spec_config.rb and modifying it.  See that file for details.  It may be necessary to use spec_config.rb as opposed to an environment variable if your database connection cannot be specified by a connection string.
+Seqeul は、テストするデータベースを指定するか、どのようにテストされるべきかを指定するために、テスト時に環境変数を使用します。
+spec/spec_config.rb.example を spec/spec_config.rb にコピーして、それを変更することでもデータベースを指定することができます。
+詳細はファイルを見てください。
+データベース接続が接続文字列で指定できない場合は、環境変数ではなく spec_config.rb を使用する必要があるでしょう。
 
-=== Connection Strings
+=== 接続文字列
 
-The following environment variables specify Database connection URL strings:
+次の環境変数はデータベース接続 URL 文字列を指定します:
 
 * SEQUEL_INTEGRATION_URL: integration specs
 * SEQUEL_FB_SPEC_DB: firebird adapter specs
@@ -160,10 +180,10 @@ The following environment variables specify Database connection URL strings:
 * SEQUEL_MY_SPEC_DB: mysql adapter specs
 * SEQUEL_DB2_SPEC_DB: db2 adapter specs
 
-=== Other
+=== その他
 
-* SEQUEL_MSSQL_SPEC_REQUIRE: Separate file to require when running mssql adapter specs
-* SEQUEL_DB2_SPEC_REQUIRE: Separate file to require when running db2 adapter specs
-* SEQUEL_COLUMNS_INTROSPECTION: Whether to run the specs with the columns_introspection extension loaded by default
-* SEQUEL_NO_PENDING: Don't mark any specs as pending, try running all specs
-* SKIPPED_TEST_WARN: Warn when skipping any tests because libraries aren't available
+* SEQUEL_MSSQL_SPEC_REQUIRE: mssql アダプタ spec の実行時に必要とするファイルを分離する
+* SEQUEL_DB2_SPEC_REQUIRE: db2 アダプタ spec の実行時に必要とするファイルを分離する
+* SEQUEL_COLUMNS_INTROSPECTION: デフォルトでロードされる columns_introspection 拡張で spec を実行するかどうか
+* SEQUEL_NO_PENDING: どの spec もペンディングとしてマークせず、すべての spec をトライする
+* SKIPPED_TEST_WARN: ライブラリが有効でないためにテストをスキップした時に警告する
