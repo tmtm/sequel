@@ -24,7 +24,7 @@ sequel gem をインストールしてあれば、"sequel" を実行するだけ
   sequel postgres://user:pass@host/database_name
   sequel mysql2://user:pass@host/database_name
 
-詳細と接続文字列の例は {データベース接続ガイド}[link:files/doc/opening_databases_rdoc.html] を参照してください。
+詳細と接続文字列の例は {データベース接続ガイド}[rdoc-ref:doc/opening_databases.rdoc] を参照してください。
 
 === YAML 接続ファイル
 
@@ -76,7 +76,7 @@ Ruby コードの小さな部品をすばやく実行したい場合は、-c オ
 
   sequel -m /path/to/migrations/dir -M 3 postgres://host/database
 
-マイグレーションについての詳細は {migration guide}[link:files/doc/migration_rdoc.html] を参照してください。
+マイグレーションについての詳細は {migration guide}[rdoc-ref:doc/migration.rdoc] を参照してください。
 
 === スキーマのダンプ
 

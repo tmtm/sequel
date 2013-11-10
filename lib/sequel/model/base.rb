@@ -512,22 +512,7 @@ module Sequel
       # sharding support.
       def set_dataset(ds, opts=OPTS)
         inherited = opts[:inherited]
-        case ds
-        when Symbol, SQL::Identifier, SQL::QualifiedIdentifier, SQL::AliasedExpression, LiteralString
-          self.simple_table = db.literal(ds)
-          ds = db.from(ds)
-        when Dataset
-          self.simple_table = if ds.send(:simple_select_all?)
-            ds.literal(ds.first_source_table)
-          else
-            nil
-          end
-          @db = ds.db
-        else
-          raise(Error, "Model.set_dataset takes one of the following classes as an argument: Symbol, LiteralString, SQL::Identifier, SQL::QualifiedIdentifier, SQL::AliasedExpression, Dataset")
-        end
-        set_dataset_row_proc(ds)
-        @dataset = ds
+        @dataset = convert_input_dataset(ds)
         @require_modification = Sequel::Model.require_modification.nil? ? @dataset.provides_accurate_rows_matched? : Sequel::Model.require_modification
         if inherited
           self.simple_table = superclass.simple_table
@@ -644,6 +629,25 @@ module Sequel
         end
       end
 
+      # Convert the given object to a Dataset that should be used as
+      # this model's dataset.
+      def convert_input_dataset(ds)
+        case ds
+        when Symbol, SQL::Identifier, SQL::QualifiedIdentifier, SQL::AliasedExpression, LiteralString
+          self.simple_table = db.literal(ds)
+          ds = db.from(ds)
+        when Dataset
+          self.simple_table = if ds.send(:simple_select_all?)
+            ds.literal(ds.first_source_table)
+          end
+          @db = ds.db
+        else
+          raise(Error, "Model.set_dataset takes one of the following classes as an argument: Symbol, LiteralString, SQL::Identifier, SQL::QualifiedIdentifier, SQL::AliasedExpression, Dataset")
+        end
+        set_dataset_row_proc(ds)
+        ds
+      end
+
       # Add the module to the class's dataset_method_modules.  Extend the dataset with the
       # module if the model has a dataset.  Add dataset methods to the class for all
       # public dataset methods.
@@ -703,7 +707,7 @@ module Sequel
         schema_array = check_non_connection_error{db.schema(dataset, :reload=>reload)} if db.supports_schema_parsing?
         if schema_array
           schema_array.each{|k,v| schema_hash[k] = v}
-          if ds_opts.include?(:select)
+          if (select = ds_opts[:select]) && !(select.length == 1 && select.first.is_a?(SQL::ColumnAll))
             # We don't remove the columns from the schema_hash,
             # as it's possible they will be used for typecasting
             # even if they are not selected.
@@ -1022,7 +1026,7 @@ module Sequel
       
       # Like delete but runs hooks before and after delete.
       # If before_destroy returns false, returns false without
-      # deleting the object the the database. Otherwise, deletes
+      # deleting the object from the database. Otherwise, deletes
       # the item from the database and returns self.  Uses a transaction
       # if use_transactions is true or if the :transaction option is given and
       # true.
@@ -1473,7 +1477,7 @@ module Sequel
       
       # Validates the object.  If the object is invalid, errors should be added
       # to the errors attribute.  By default, does nothing, as all models
-      # are valid by default.  See the {"Model Validations" guide}[link:files/doc/validations_rdoc.html].
+      # are valid by default.  See the {"Model Validations" guide}[rdoc-ref:doc/validations.rdoc].
       # for details about validation.  Should not be called directly by
       # user code, call <tt>valid?</tt> instead to check if an object
       # is valid.

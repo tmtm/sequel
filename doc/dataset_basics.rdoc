@@ -81,7 +81,7 @@ WHERE:: where, filter, exclude, exclude_where, and, or, grep, invert, unfiltered
 GROUP:: group, group_by, group_and_count, select_group, ungrouped
 HAVING:: having, exclude_having, invert, unfiltered
 ORDER:: order, order_by, order_append, order_prepend, order_more, reverse, reverse_order, unordered
-LIMIT:: limit, unlimited
+LIMIT/OFFSET:: limit, offset, unlimited
 混合:: union, intersect, except
 ロック:: for_update, lock_style
 一般的なテーブル表現:: with, with_recursive

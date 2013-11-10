@@ -21,13 +21,34 @@ describe "An Oracle database" do
       Integer :id
       String :cat_name, :size => 50
     end
+
+    DB.create_table!(:notes) do
+      Integer :id
+      String :title, :size => 50
+      String :content, :text => true
+    end
     @d = DB[:items]
   end
   after do
     @d.delete
   end
   after(:all) do
-    DB.drop_table?(:items, :books, :categories)
+    DB.drop_table?(:items, :books, :categories, :notes)
+  end
+
+  specify "should allow limit and offset with clob columns" do
+    notes = []
+    notes << {:id => 1, :title => 'abc', :content => 'zyx'}
+    notes << {:id => 2, :title => 'def', :content => 'wvu'}
+    notes << {:id => 3, :title => 'ghi', :content => 'tsr'}
+    notes << {:id => 4, :title => 'jkl', :content => 'qpo'}
+    notes << {:id => 5, :title => 'mno', :content => 'nml'}
+    DB[:notes].multi_insert(notes)
+
+    DB[:notes].sort_by{|x| x[:id]}.should == notes
+    rows = DB[:notes].limit(3, 0).all
+    rows.length.should == 3
+    rows.all?{|v| notes.should include(v)}
   end
 
   specify "should provide disconnect functionality" do

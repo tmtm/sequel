@@ -1,3 +1,37 @@
+=== 4.4.0 (2013-11-01)
+
+* Make Database#tables not show tables in the recycle bin on Oracle (jeremyevans) (#728)
+
+* Don't automatically order on all columns when emulating offsets for unordered datasets on DB2 (jeremyevans)
+
+* Improve PostgreSQL type support in the jdbc/postgresql adapter (jeremyevans)
+
+* Make offset emulation on Oracle work when using columns that can't be ordered (jeremyevans, sdeming) (#724, #725)
+
+* Make filter by associations support handle associations with :conditions or block (jeremyevans)
+
+* Make association cloning handle :block correctly for clones of clones (jeremyevans)
+
+* Make association cloning handle :eager_block option correctly (jeremyevans)
+
+* Make add_primary_key work on h2 (jeremyevans)
+
+* Add support for foreign key parsing on Oracle (jeremyevans)
+
+* Add support for foreign key parsing to the jdbc adapter (jeremyevans)
+
+* Make add_foreign_key work on HSQLDB (jeremyevans)
+
+* Add table_select plugin for selecting table.* instead of * for model datasets (jeremyevans)
+
+* Issue constraint_validation table deletes before inserts, so modifying constraint via drop/add in same alter_table block works (jeremyevans)
+
+* Support add_*/remove_*/remove_all_* pg_array_to_many association methods on unsaved model objects (jeremyevans)
+
+* Add Sybase SQLAnywhere support via new sqlanywhere and jdbc/sqlanywhere adapters (gditrick, jeremyevans)
+
+* Add Dataset#offset for setting the offset separately from the limit (Paul Henry, jeremyevans) (#717)
+
 === 4.3.0 (2013-10-02)
 
 * Fix literalization of empty blobs on MySQL (jeremyevans) (#715)

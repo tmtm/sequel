@@ -31,6 +31,29 @@ module Sequel
         :oracle
       end
 
+      def foreign_key_list(table, opts=OPTS)
+        m = output_identifier_meth
+        im = input_identifier_meth
+        schema, table = schema_and_table(table)
+        ds = metadata_dataset.
+          from(:all_cons_columns___pc, :all_constraints___p, :all_cons_columns___fc, :all_constraints___f).
+          where(:f__table_name=>im.call(table), :f__constraint_type=>'R', :p__owner=>:f__r_owner, :p__constraint_name=>:f__r_constraint_name, :pc__owner=>:p__owner, :pc__constraint_name=>:p__constraint_name, :pc__table_name=>:p__table_name, :fc__owner=>:f__owner, :fc__constraint_name=>:f__constraint_name, :fc__table_name=>:f__table_name, :fc__position=>:pc__position).
+          select(:p__table_name___table, :pc__column_name___key, :fc__column_name___column, :f__constraint_name___name).
+          order(:table, :fc__position)
+        ds = ds.where(:f__schema_name=>im.call(schema)) if schema
+
+        fks = {}
+        ds.each do |r|
+          if fk = fks[r[:name]]
+            fk[:columns] << m.call(r[:column])
+            fk[:key] << m.call(r[:key])
+          else
+            fks[r[:name]] = {:name=>m.call(r[:name]), :columns=>[m.call(r[:column])], :table=>m.call(r[:table]), :key=>[m.call(r[:key])]}
+          end
+        end
+        fks.values
+      end
+
       # Oracle namespaces indexes per table.
       def global_index_namespace?
         false
@@ -38,7 +61,7 @@ module Sequel
 
       def tables(opts=OPTS)
         m = output_identifier_meth
-        metadata_dataset.from(:tab).server(opts[:server]).select(:tname).filter(:tabtype => 'TABLE').map{|r| m.call(r[:tname])}
+        metadata_dataset.from(:tabs).server(opts[:server]).select(:table_name).map{|r| m.call(r[:table_name])}
       end
 
       def views(opts=OPTS) 
@@ -224,8 +247,6 @@ module Sequel
     end
 
     module DatasetMethods
-      include EmulateOffsetWithRowNumber
-
       SELECT_CLAUSE_METHODS = Dataset.clause_methods(:select, %w'with select distinct columns from join where group having compounds order lock')
       ROW_NUMBER_EXPRESSION = LiteralString.new('ROWNUM').freeze
       SPACE = Dataset::SPACE
@@ -326,7 +347,23 @@ module Sequel
 
       # Handle LIMIT by using a unlimited subselect filtered with ROWNUM.
       def select_sql
-        if (limit = @opts[:limit]) && !@opts[:sql]
+        return super if @opts[:sql]
+        if o = @opts[:offset]
+          columns = clone(:append_sql=>'').columns
+          dsa1 = dataset_alias(1)
+          rn = row_number_column
+          limit = @opts[:limit]
+          ds = unlimited.
+            from_self(:alias=>dsa1).
+            select_append(ROW_NUMBER_EXPRESSION.as(rn)).
+            from_self(:alias=>dsa1).
+            select(*columns).
+            where(SQL::Identifier.new(rn) > o)
+          ds = ds.where(SQL::Identifier.new(rn) <= Sequel.+(o, limit)) if limit
+          sql = @opts[:append_sql] || ''
+          subselect_sql_append(sql, ds)
+          sql
+        elsif limit = @opts[:limit]
           ds = clone(:limit=>nil)
           # Lock doesn't work in subselects, so don't use a subselect when locking.
           # Don't use a subselect if custom SQL is used, as it breaks somethings.

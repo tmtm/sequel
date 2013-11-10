@@ -445,7 +445,7 @@ use separate filter calls:
 
   Album.where(:tags=>@tag1).where(:tags=>@tag2)
 
-Or the the array form of condition specifiers:
+Or the array form of condition specifiers:
 
   Album.where([[:tags, @tag1], [:tags, @tag2]])
 
@@ -462,8 +462,22 @@ the other forms, this can be inverted:
  
 This will return all albums whose artist does not start with 'A'.
 
-Note that filtering by associations only works correctly for simple
-associations (ones without conditions).
+Filtering by associations even works for associations that have
+conditions added via the :conditions option or a block:
+
+  Album.one_to_many :popular_tags, :clone=>:tags do |ds|
+    ds.where{times_used > 1000}
+  end
+  Album.where(:popular_tags=>[@tag1, @tag2])
+
+This will return all albums that whose popular tags would include
+at least one of those tags.
+
+Note that filtering by associations does not work for associations
+that use blocks with instance-specific code, or associations that
+have a limit or offset. This includes many_to_one/one_to_one
+associations that would return multiple values if they were not
+limited to a single value.
 
 == Name Collisions
 
@@ -677,7 +691,7 @@ The add_<i>association</i> method returns the now associated object:
 
 === remove_<i>association</i>(object_to_disassociate) (e.g. remove_album) [+one_to_many+ and +many_to_many+]
 
-The remove_<i>association</i> method disassociates the the passed object from
+The remove_<i>association</i> method disassociates the passed object from
 the current object.  For +one_to_many+ associations, it sets the foreign key of
 the associated object to NULL, and saves the associated object.  For
 +many_to_many+ associations, this deletes the matching row in the join table.
@@ -735,7 +749,7 @@ added methods:
   ds.model_object # @artist
   ds.association_reflection # same as Artist.association_reflection(:albums)
 
-For a more info on Sequel's reflection capabilities see the {Reflection page}[link:files/doc/reflection_rdoc.html].
+For a more info on Sequel's reflection capabilities see the {Reflection page}[rdoc-ref:doc/reflection.rdoc].
 
 == Overriding Method Behavior
 
@@ -1041,7 +1055,7 @@ the artist can perform any one of four tasks for the lyric:
 
 A module or array of modules to extend the dataset with.  These are used to
 set up association extensions.  For more information , please see the
-{Advanced Associations page}[link:files/doc/advanced_associations_rdoc.html].
+{Advanced Associations page}[rdoc-ref:doc/advanced_associations.rdoc].
 
 ==== :primary_key
 
@@ -1235,7 +1249,7 @@ to eagerly load:
 
 A custom loader to use when eagerly load associated objects via eager.
 For many details and examples of custom eager loaders, please see the
-{Advanced Associations guide}[link:files/doc/advanced_associations_rdoc.html].
+{Advanced Associations guide}[rdoc-ref:doc/advanced_associations.rdoc].
 
 ==== :eager_loader_key
 

@@ -36,7 +36,7 @@ module Sequel
     QUERY_METHODS = (<<-METHS).split.map{|x| x.to_sym} + JOIN_METHODS
       add_graph_aliases and distinct except exclude exclude_having exclude_where
       filter for_update from from_self graph grep group group_and_count group_by having intersect invert
-      limit lock_style naked or order order_append order_by order_more order_prepend qualify
+      limit lock_style naked offset or order order_append order_by order_more order_prepend qualify
       reverse reverse_order select select_all select_append select_group select_more server
       set_graph_aliases unfiltered ungraphed ungrouped union
       unlimited unordered where with with_recursive with_sql
@@ -524,6 +524,7 @@ module Sequel
       return from_self.limit(l, o) if @opts[:sql]
 
       if l.is_a?(Range)
+        no_offset = false
         o = l.first
         l = l.last - l.first + (l.exclude_end? ? 0 : 1)
       end
@@ -531,17 +532,10 @@ module Sequel
       if l.is_a?(Integer)
         raise(Error, 'Limits must be greater than or equal to 1') unless l >= 1
       end
-      opts = {:limit => l}
-      if o
-        o = o.to_i if o.is_a?(String) && !o.is_a?(LiteralString)
-        if o.is_a?(Integer)
-          raise(Error, 'Offsets must be greater than or equal to 0') unless o >= 0
-        end
-        opts[:offset] = o
-      elsif !no_offset
-        opts[:offset] = nil
-      end
-      clone(opts)
+
+      ds = clone(:limit=>l)
+      ds = ds.offset(o) unless no_offset
+      ds
     end
     
     # Returns a cloned dataset with the given lock style.  If style is a
@@ -567,6 +561,19 @@ module Sequel
       ds = clone
       ds.row_proc = nil
       ds
+    end
+
+    # Returns a copy of the dataset with a specified order. Can be safely combined with limit.
+    # If you call limit with an offset, it will override override the offset if you've called
+    # offset first.
+    #
+    #   DB[:items].offset(10) # SELECT * FROM items OFFSET 10
+    def offset(o)
+      o = o.to_i if o.is_a?(String) && !o.is_a?(LiteralString)
+      if o.is_a?(Integer)
+        raise(Error, 'Offsets must be greater than or equal to 0') unless o >= 0
+      end
+      clone(:offset => o)
     end
     
     # Adds an alternate filter to an existing filter using OR. If no filter 
@@ -842,7 +849,7 @@ module Sequel
     # where also accepts a block, which should return one of the above argument
     # types, and is treated the same way.  This block yields a virtual row object,
     # which is easy to use to create identifiers and functions.  For more details
-    # on the virtual row support, see the {"Virtual Rows" guide}[link:files/doc/virtual_rows_rdoc.html]
+    # on the virtual row support, see the {"Virtual Rows" guide}[rdoc-ref:doc/virtual_rows.rdoc]
     #
     # If both a block and regular argument are provided, they get ANDed together.
     #
@@ -871,7 +878,7 @@ module Sequel
     #   software = dataset.where(:category => 'software').where{price < 100}
     #   # SELECT * FROM items WHERE ((category = 'software') AND (price < 100))
     #
-    # See the the {"Dataset Filtering" guide}[link:files/doc/dataset_filtering_rdoc.html] for more examples and details.
+    # See the {"Dataset Filtering" guide}[rdoc-ref:doc/dataset_filtering.rdoc] for more examples and details.
     def where(*cond, &block)
       _filter(:where, *cond, &block)
     end
@@ -961,10 +968,24 @@ module Sequel
       !(@opts.collect{|k,v| k unless v.nil?}.compact & opts).empty?
     end
 
-    # Whether this dataset is a simple SELECT * FROM table.
+    # Whether this dataset is a simple select from an underlying table, such as:
+    #
+    #   SELECT * FROM table
+    #   SELECT table.* FROM table
     def simple_select_all?
       o = @opts.reject{|k,v| v.nil? || NON_SQL_OPTIONS.include?(k)}
-      o.length == 1 && (f = o[:from]) && f.length == 1 && (f.first.is_a?(Symbol) || f.first.is_a?(SQL::AliasedExpression))
+      if (f = o[:from]) && f.length == 1 && (f.first.is_a?(Symbol) || f.first.is_a?(SQL::AliasedExpression))
+        case o.length
+        when 1
+          true
+        when 2
+          (s = o[:select]) && s.length == 1 && s.first.is_a?(SQL::ColumnAll)
+        else
+          false
+        end
+      else
+        false
+      end
     end
 
     private

@@ -206,7 +206,7 @@ describe "Database foreign key parsing" do
   end
 
   specify "should parse foreign key information into an array of hashes" do
-    @db.create_table!(:a, :engine=>:InnoDB){primary_key :c; Integer :d; index :d, :unique=>true}
+    @db.create_table!(:a, :engine=>:InnoDB){primary_key :c; Integer :d, :null => false, :unique => true}
     @db.create_table!(:b, :engine=>:InnoDB){foreign_key :e, :a}
     @pr[:a]
     @pr[:b, [[:e], :a, [:pk, :c]]]
@@ -217,7 +217,7 @@ describe "Database foreign key parsing" do
     @db.alter_table(:b){add_foreign_key [:f], :a, :key=>[:c]}
     @pr[:b, [[:e], :a, [:pk, :c]], [[:f], :a, [:c]], [[:f], :a, [:d]]]
 
-    @db.alter_table(:a){add_index [:d, :c], :unique=>true}
+    @db.alter_table(:a){add_unique_constraint [:d, :c]}
     @db.alter_table(:b){add_foreign_key [:f, :e], :a, :key=>[:d, :c]}
     @pr[:b, [[:e], :a, [:pk, :c]], [[:f], :a, [:c]], [[:f], :a, [:d]], [[:f, :e], :a, [:d, :c]]]
 
@@ -232,9 +232,9 @@ describe "Database foreign key parsing" do
   end
 
   specify "should handle composite foreign and primary keys" do
-    @db.create_table!(:a, :engine=>:InnoDB){Integer :b; Integer :c; primary_key [:b, :c]; index [:c, :b], :unique=>true}
-    @db.create_table!(:b, :engine=>:InnoDB){Integer :e; Integer :f; foreign_key [:e, :f], :a; foreign_key [:f, :e], :a, :key=>[:c, :b]}
-    @pr[:b, [[:e, :f], :a, [:pk, :b, :c]], [[:f, :e], :a, [:c, :b]]]
+    @db.create_table!(:a, :engine=>:InnoDB){Integer :b, :null=>false; Integer :c, :null=>false; Integer :d, :null=>false; primary_key [:b, :c]; unique [:d, :c]}
+    @db.create_table!(:b, :engine=>:InnoDB){Integer :e, :null=>false; Integer :f, :null=>false; Integer :g, :null=>false; foreign_key [:e, :f], :a; foreign_key [:g, :f], :a, :key=>[:d, :c]}
+    @pr[:b, [[:e, :f], :a, [:pk, :b, :c]], [[:g, :f], :a, [:d, :c]]]
   end
 end if DB.supports_foreign_key_parsing?
 
@@ -400,7 +400,7 @@ describe "Database schema modifiers" do
     @ds.all.should == [{:number=>10, :name=>nil}]
   end
 
-  cspecify "should add primary key columns to tables correctly", :h2, :derby do
+  cspecify "should add primary key columns to tables correctly", :derby do
     @db.create_table!(:items){Integer :number}
     @ds.insert(:number=>10)
     @db.alter_table(:items){add_primary_key :id}
@@ -418,7 +418,7 @@ describe "Database schema modifiers" do
     proc{@ds.insert(10)}.should_not raise_error
   end
 
-  cspecify "should add foreign key columns to tables correctly", :hsqldb do
+  specify "should add foreign key columns to tables correctly" do
     @db.create_table!(:items){primary_key :id}
     @ds.insert
     i = @ds.get(:id)
@@ -545,7 +545,7 @@ describe "Database schema modifiers" do
   end
 
   specify "should add unnamed unique constraints and foreign key table constraints correctly" do
-    @db.create_table!(:items, :engine=>:InnoDB){Integer :id; Integer :item_id}
+    @db.create_table!(:items, :engine=>:InnoDB){Integer :id, :null => false; Integer :item_id, :null => false}
     @db.alter_table(:items) do
       add_unique_constraint [:item_id, :id]
       add_foreign_key [:id, :item_id], :items, :key=>[:item_id, :id]
@@ -607,18 +607,16 @@ describe "Database schema modifiers" do
     @db.schema(:items, :reload=>true).map{|x| x.first}.should == [:id]
   end
 
-  cspecify "should remove foreign key columns from tables correctly", :h2, :mssql, :hsqldb do
-    # MySQL with InnoDB cannot drop foreign key columns unless you know the
-    # name of the constraint, see Bug #14347
-    @db.create_table!(:items, :engine=>:MyISAM) do
+  specify "should remove foreign key columns from tables correctly" do
+    @db.create_table!(:items, :engine=>:InnoDB) do
       primary_key :id
       Integer :i
       foreign_key :item_id, :items
     end
     @ds.insert(:i=>10)
-    @db.drop_column(:items, :item_id)
+    @db.alter_table(:items){drop_foreign_key :item_id}
     @db.schema(:items, :reload=>true).map{|x| x.first}.should == [:id, :i]
-  end
+  end if DB.supports_foreign_key_parsing?
 
   specify "should remove multiple columns in a single alter_table block" do
     @db.create_table!(:items) do

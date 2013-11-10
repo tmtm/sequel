@@ -63,7 +63,7 @@
   dataset.inject(0){|sum, r| sum + r[:value]}
   dataset.sum(:value) # より良い
 
-== フィルタリング ({Dataset Filtering}[link:files/doc/dataset_filtering_rdoc.html] も参照)
+== フィルタリング ({Dataset Filtering}[rdoc-ref:doc/dataset_filtering.rdoc] も参照)
 
 === 同値
 
@@ -121,6 +121,7 @@
 
   dataset.limit(30) # LIMIT 30
   dataset.limit(30, 10) # LIMIT 30 OFFSET 10
+  dataset.limit(30).offset(10) # LIMIT 30 OFFSET 10
 
 == 結合
 

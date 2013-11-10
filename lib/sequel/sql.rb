@@ -1477,7 +1477,7 @@ module Sequel
       end
 
       # Create a new +Subscript+ appending the given subscript(s)
-      # the the current array of subscripts.
+      # to the current array of subscripts.
       #
       #   :a.sql_subscript(2) # a[2]
       #   :a.sql_subscript(2) | 1 # a[2, 1]
@@ -1582,7 +1582,7 @@ module Sequel
     #   # Literal Strings
     #   ds.filter{{a=>`some SQL`}} # SELECT * FROM t WHERE (a = some SQL)
     #
-    # For a more detailed explanation, see the {Virtual Rows guide}[link:files/doc/virtual_rows_rdoc.html].
+    # For a more detailed explanation, see the {Virtual Rows guide}[rdoc-ref:doc/virtual_rows.rdoc].
     class VirtualRow < BasicObject
       WILDCARD = LiteralString.new('*').freeze
       QUESTION_MARK = LiteralString.new('?').freeze

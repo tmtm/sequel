@@ -5,7 +5,7 @@ Sequel はシンプルで柔軟でパワフルな、Ruby の SQL データベー
 * Sequel はスレッド安全、コネクションプーリング、SQLクエリを構築するための簡潔な DSL、テーブルスキーマを提供します。
 * Sequel は、レコードを Ruby オブジェクトにマッピングし、関連レコードを操作するための包括的な ORM 層を含んでいます。
 * Sequel は次のような先進的なデータベース機能をサポートします: プリペアドステートメント、bound variables,、ストアドプロシジャ、セーブポイント、ツーフェーズコミット、トランザクション分離、マスター／スレーブ構成、データベースシャーディング
-* Sequel は現在次のアダプタを持っています: ADO, Amalgalite, CUBRID, DataObjects, DB2, DBI, Firebird, IBM_DB, Informix, JDBC, MySQL, Mysql2, ODBC, OpenBase, Oracle, PostgreSQL, SQLite3, Swift, TinyTDS
+* Sequel は現在次のアダプタを持っています: ADO, Amalgalite, CUBRID, DataObjects, DB2, DBI, Firebird, IBM_DB, Informix, JDBC, MySQL, Mysql2, ODBC, OpenBase, Oracle, PostgreSQL, SQLAnywhere, SQLite3, Swift, TinyTDS
 
 == リソース
 
@@ -61,7 +61,7 @@ Sequel はデータベースに素早くアクセスするための IRB コン�
 
 DB に格納されたデータベースオブジェクトでIRB セッションを開始します。
 
-IRB シェル(デフォルトの振る舞い)に加え、bin/sequel はデータベースのマイグレート、スキーママイグレーションのダンプ、データベースのコピーもサポートします。詳細は {bin/sequel ガイド}[link:files/doc/bin_sequel_rdoc.html] を見てください。
+IRB シェル(デフォルトの振る舞い)に加え、bin/sequel はデータベースのマイグレート、スキーママイグレーションのダンプ、データベースのコピーもサポートします。詳細は {bin/sequel ガイド}[rdoc-ref:doc/bin_sequel.rdoc] を見てください。
 
 == はじめに
 
@@ -241,12 +241,12 @@ Sequel は式も受け付けます:
 
   my_posts.each{|row| p row}
   
-詳細は {Dataset Filtering}[link:files/doc/dataset_filtering_rdoc.html] を見てください。
+詳細は {Dataset Filtering}[rdoc-ref:doc/dataset_filtering.rdoc] を見てください。
 
 === セキュリティ
 
 セキュリティを念頭においてアプリケーションを設計することはベストプラクティスです。
-Sequel 使用時に注意すべきセキュリティ事項の詳細については {Security Guide}[link:files/doc/security_rdoc.html] を読んでください。
+Sequel 使用時に注意すべきセキュリティ事項の詳細については {Security Guide}[rdoc-ref:doc/security.rdoc] を読んでください。
 
 === レコードの集約
 
@@ -303,7 +303,7 @@ Sequel 使用時に注意すべきセキュリティ事項の詳細について�
 
 === コア拡張
 
-上の例の <tt>Sequel.desc(:stamp)</tt> の使用に着目してください。Sequel の DSL の多くはこのスタイル(SQL 式オブジェクトを返す Sequel モジュールのメソッド呼び出し)を使用します。Sequel は {core_extensions extension}[link:files/doc/core_extensions_rdoc.html]) も提供します。これは Sequel の DSL をよりよく Ruby 言語に統合します。次のように書けます:
+上の例の <tt>Sequel.desc(:stamp)</tt> の使用に着目してください。Sequel の DSL の多くはこのスタイル(SQL 式オブジェクトを返す Sequel モジュールのメソッド呼び出し)を使用します。Sequel は {core_extensions extension}[rdoc-ref:doc/core_extensions.rdoc]) も提供します。これは Sequel の DSL をよりよく Ruby 言語に統合します。次のように書けます:
 
   :stamp.desc
 
@@ -558,7 +558,7 @@ Sequel モデルはプライマリキーとして任意のカラムを使用で�
 
 === Mass assignment
 
-You can also set the values for multiple columns in a single method call, using one of the mass-assignment methods.  See the {mass assignment guide}[link:files/doc/mass_assignment_rdoc.html] for details.  For example +set+ updates the model's column values without saving:
+You can also set the values for multiple columns in a single method call, using one of the mass-assignment methods.  See the {mass assignment guide}[rdoc-ref:doc/mass_assignment.rdoc] for details.  For example +set+ updates the model's column values without saving:
 
   post.set(:title=>'hey there', :updated_by=>'foo')
 

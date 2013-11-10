@@ -85,7 +85,7 @@ Sequel ではほとんどどこでもリテラル文字列で提供されるリ�
   DB[:albums].select('name') # SELECT 'name' FROM albums
   DB[:albums].select(Sequel.lit('name')) # SELECT name FROM albums
 
-リテラル文字列を生成するさらに簡単な方法として、{core_extensions extension}[link:files/doc/core_extensions_rdoc.html] を使用することもできます。これは <tt>String#lit</tt> メソッドを追加し、Ruby 言語に Sequel の DSL を統合する他のメソッドを追加します:
+リテラル文字列を生成するさらに簡単な方法として、{core_extensions extension}[rdoc-ref:doc/core_extensions.rdoc] を使用することもできます。これは <tt>String#lit</tt> メソッドを追加し、Ruby 言語に Sequel の DSL を統合する他のメソッドを追加します:
 
   DB[:albums].select('name'.lit)
 
@@ -150,7 +150,7 @@ Sequel では主に2つの方法があります。
 
   Sequel.qualify(:table, :column) # "table"."column"
 
-識別子を生成する他の方法は、Sequel の {virtual row support}[link:files/doc/virtual_rows_rdoc.html] を使用することです:
+識別子を生成する他の方法は、Sequel の {virtual row support}[rdoc-ref:doc/virtual_rows.rdoc] を使用することです:
 
   DB[:albums].select{name} # SELECT "name" FROM "albums"
   DB[:albums].select{albums__name} # SELECT "albums"."name" FROM "albums"
@@ -597,4 +597,4 @@ Sequel データセットは INSERT, UPDATE, DELETE でも使用されます。
 
 === 各 SQL 節で使用されるメソッド
 
-各 SQL 節に影響するメソッドにどんなものがあるかを見るには、{"Dataset Basics" guide}[link:files/doc/dataset_basics_rdoc.html] を見てください。
+各 SQL 節に影響するメソッドにどんなものがあるかを見るには、{"Dataset Basics" guide}[rdoc-ref:doc/dataset_basics.rdoc] を見てください。

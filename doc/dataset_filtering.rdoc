@@ -29,7 +29,7 @@ Sequel は Sequel.function メソッドを使用して関数を指定するこ�
 
   items.select{avg(price)}
 
-{core_extensions extension}[link:files/doc/core_extensions_rdoc.html] と +sql_function+ メソッドを使用できます:
+{core_extensions extension}[rdoc-ref:doc/core_extensions.rdoc] と +sql_function+ メソッドを使用できます:
 
   :avg.sql_function(:price)
 

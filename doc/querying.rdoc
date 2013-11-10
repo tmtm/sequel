@@ -8,7 +8,7 @@ Sequel は簡単に使用でき、とても柔軟で強力なデータベース�
 このガイドは Sequel のクエリサポートのやさしい紹介を目的としています。
 
 Sequel で生の SQL を簡単に使用することができますが、Sequel の利用から得られる利点の大部分は、SQL を抽象化し、より良いインタフェースを与える Sequel の能力です。
-Sequel は {core_extensions extension}[link:files/doc/core_extensions_rdoc.html] も提供し、Sequel の DSL を Ruby 言語により良く等号します。
+Sequel は {core_extensions extension}[rdoc-ref:files/doc/core_extensions.rdoc] も提供し、Sequel の DSL を Ruby 言語により良く統合します。
 
 == オブジェクトの取り出し
 
@@ -20,7 +20,7 @@ Sequel はデータベースからオブジェクトを取り出すためにい�
 
 === Sequel::Dataset
 
-Sequel に慣れていなくて詳しくない場合は、おそらく {"Dataset Basics" guide}[link:files/doc/dataset_basics_rdoc.html] を読むべきです。それからここに戻ってきてください。
+Sequel に慣れていなくて詳しくない場合は、おそらく {"Dataset Basics" guide}[rdoc-ref:doc/dataset_basics.rdoc] を読むべきです。それからここに戻ってきてください。
 
 === ひとつのオブジェクトの取り出し
 
@@ -338,7 +338,7 @@ Range には、Sequel は不等号ステートメントのペアを使用しま�
   Artist.where{id > 5}
   # SELECT * FROM artists WHERE id > 5
 
-仮想行ブロックについての詳細は {"Virtual Rows" guide}[link:files/doc/virtual_rows_rdoc.html] を参照してください。
+仮想行ブロックについての詳細は {"Virtual Rows" guide}[rdoc-ref:doc/virtual_rows.rdoc] を参照してください。
 
 正規表現とブロックの両方を与えることもできます。この場合は結果は AND されます:
 
@@ -569,7 +569,12 @@ Sequel はカラム選択を操作するためいくつかのメソッドを提�
   Artist.limit(5, 10)
   # SELECT * FROM artists LIMIT 5 OFFSET 10
 
-これは、元のデータセットの11番目から15番目のレコードを返します。
++offset+ メソッドを別に呼ぶこともできます:
+
+  Artist.limit(5).offset(10)
+  # SELECT * FROM artists LIMIT 5 OFFSET 10
+
+これらはどちらも元のデータセットの11番目から15番目のレコードを返します。
 
 データセットから limit を削除するには +unlimited+ を使用します:
 

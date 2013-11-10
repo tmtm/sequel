@@ -76,7 +76,7 @@ These options are shared by all adapters unless otherwise noted.
 :test :: Whether to test that a valid database connection can be made (false by default)
 :user :: The user account name to use logging in
 
-The following options can be specified and are passed to the the database's internal connection pool.
+The following options can be specified and are passed to the database's internal connection pool.
 
 :after_connect :: A proc called after a new connection is made, with the connection object (default: nil)
 :max_connections :: The maximum size of the connection pool (default: 4 connections on most databases)
@@ -271,6 +271,7 @@ Example connection strings:
   jdbc:firebirdsql:localhost/3050:/path/to/database.fdb
   jdbc:jdbcprogress:T:hostname:port:database
   jdbc:cubrid:hostname:port:database:::
+  jdbc:sqlanywhere://localhost?DBN=Test;UID=user;PWD=password
 
 You can also use JNDI connection strings:
 
@@ -369,6 +370,17 @@ The following additional options are supported:
             respected if using the pg library)
 :use_iso_date_format :: This can be set to false to not force the ISO date format.  Sequel forces
                         it by default to allow for an optimization.
+
+=== sqlanywhere
+
+The sqlanywhere driver works off connection strings, so a connection string
+is built based on the url/options hash provided.  The following additional
+options are respected:
+
+:commlinks :: specify the CommLinks connection string option
+:conn_string :: specify the connection string to use, ignoring all other options
+:connection_name :: specify the ConnectionName connection string option
+:encoding :: specify the CharSet connection string option
 
 === sqlite
 

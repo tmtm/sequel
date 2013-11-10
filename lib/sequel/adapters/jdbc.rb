@@ -143,6 +143,25 @@ module Sequel
         db.extend(Sequel::JDBC::Cubrid::DatabaseMethods)
         db.extend_datasets Sequel::Cubrid::DatasetMethods
         Java::cubrid.jdbc.driver.CUBRIDDriver
+      end,
+      :sqlanywhere=>proc do |db|
+        drv = [
+          lambda{Java::sybase.jdbc4.sqlanywhere.IDriver},
+          lambda{Java::ianywhere.ml.jdbcodbc.jdbc4.IDriver},
+          lambda{Java::sybase.jdbc.sqlanywhere.IDriver},
+          lambda{Java::ianywhere.ml.jdbcodbc.jdbc.IDriver},
+          lambda{Java::com.sybase.jdbc4.jdbc.Sybdriver},
+          lambda{Java::com.sybase.jdbc3.jdbc.Sybdriver}
+        ].each do |class_proc|
+          begin
+            break class_proc.call
+          rescue NameError
+          end
+        end
+        Sequel.require 'adapters/jdbc/sqlanywhere'
+        db.extend(Sequel::JDBC::SqlAnywhere::DatabaseMethods)
+        db.dataset_class = Sequel::JDBC::SqlAnywhere::Dataset
+        drv
       end
     }
     
@@ -286,15 +305,31 @@ module Sequel
       def execute_insert(sql, opts=OPTS)
         execute(sql, {:type=>:insert}.merge(opts))
       end
-      
+
+      # Use the JDBC metadata to get a list of foreign keys for the table.
+      def foreign_key_list(table, opts=OPTS)
+        m = output_identifier_meth
+        schema, table = metadata_schema_and_table(table, opts)
+        foreign_keys = {}
+        metadata(:getImportedKeys, nil, schema, table) do |r|
+          if fk = foreign_keys[r[:fk_name]]
+            fk[:columns] << [r[:key_seq], m.call(r[:fkcolumn_name])]
+            fk[:key] << [r[:key_seq], m.call(r[:pkcolumn_name])]
+          elsif r[:fk_name]
+            foreign_keys[r[:fk_name]] = {:name=>m.call(r[:fk_name]), :columns=>[[r[:key_seq], m.call(r[:fkcolumn_name])]], :table=>m.call(r[:pktable_name]), :key=>[[r[:key_seq], m.call(r[:pkcolumn_name])]]}
+          end
+        end
+        foreign_keys.values.each do |fk|
+          [:columns, :key].each do |k|
+            fk[k] = fk[k].sort.map{|_, v| v}
+          end
+        end
+      end
+
       # Use the JDBC metadata to get the index information for the table.
       def indexes(table, opts=OPTS)
         m = output_identifier_meth
-        im = input_identifier_meth
-        schema, table = schema_and_table(table)
-        schema ||= opts[:schema]
-        schema = im.call(schema) if schema
-        table = im.call(table)
+        schema, table = metadata_schema_and_table(table, opts)
         indexes = {}
         metadata(:getIndexInfo, nil, schema, table, false, true) do |r|
           next unless name = r[:column_name]
@@ -511,6 +546,16 @@ module Sequel
         end
       end
 
+      # Return the schema and table suitable for use with metadata queries.
+      def metadata_schema_and_table(table, opts)
+        im = input_identifier_meth(opts[:dataset])
+        schema, table = schema_and_table(table)
+        schema ||= opts[:schema]
+        schema = im.call(schema) if schema
+        table = im.call(table)
+        [schema, table]
+      end
+      
       # Created a JDBC prepared statement on the connection with the given SQL.
       def prepare_jdbc_statement(conn, sql, opts)
         conn.prepareStatement(sql)
@@ -563,12 +608,8 @@ module Sequel
       # Parse the table schema for the given table.
       def schema_parse_table(table, opts=OPTS)
         m = output_identifier_meth(opts[:dataset])
-        im = input_identifier_meth(opts[:dataset])
         ds = dataset
-        schema, table = schema_and_table(table)
-        schema ||= opts[:schema]
-        schema = im.call(schema) if schema
-        table = im.call(table)
+        schema, table = metadata_schema_and_table(table, opts)
         pks, ts = [], []
         metadata(:getPrimaryKeys, nil, schema, table) do |h|
           next if schema_parse_table_skip?(h, schema)
@@ -742,7 +783,7 @@ module Sequel
       # Return a callable object that will convert any value of <tt>v</tt>'s
       # class to a ruby object.  If no callable object can handle <tt>v</tt>'s
       # class, return false so that the negative lookup is cached.
-      def convert_type_proc(v)
+      def convert_type_proc(v, ctn=nil)
         case v
         when JAVA_BIG_DECIMAL
           DECIMAL_METHOD
@@ -768,6 +809,16 @@ module Sequel
           false
         end
       end
+
+      # The generic JDBC support does not use column info when deciding on conversion procs.
+      def convert_type_proc_uses_column_info?
+        false
+      end
+
+      # By default, if using column info, assume the info needed is the column's type name.
+      def convert_type_proc_column_info(meta, i)
+        meta.column_type_name(i)
+      end
       
       # Extend the dataset with the JDBC stored procedure methods.
       def prepare_extend_sproc(ds)
@@ -781,14 +832,29 @@ module Sequel
         meta = result.getMetaData
         cols = []
         i = 0
-        meta.getColumnCount.times{cols << [output_identifier(meta.getColumnLabel(i+=1)), i]}
-        columns = cols.map{|c| c.at(0)}
-        @columns = columns
         ct = @convert_types
-        if (ct.nil? ? db.convert_types : ct)
-          cols.each{|c| c << nil}
+        ct = db.convert_types if ct.nil?
+
+        if ct
+          use_column_info = convert_type_proc_uses_column_info?
+          # When converting types, four values are associated with every column:
+          # 1) column name symbol
+          # 2) index (starting at 1, as JDBC does)
+          # 3) database-specific value usable by convert_type_proc to determine the conversion proc to use for column
+          # 4) nil (later updated with the actual conversion proc during the lookup process)
+          meta.getColumnCount.times do
+            i += 1
+            cols << [output_identifier(meta.getColumnLabel(i)), i, (convert_type_proc_column_info(meta, i) if use_column_info), nil]
+          end
+          @columns = cols.map{|c| c.at(0)}
           process_result_set_convert(cols, result, &block)
         else
+          # When not converting types, only the type name and the index are used.
+          meta.getColumnCount.times do
+            i += 1
+            cols << [output_identifier(meta.getColumnLabel(i)), i]
+          end
+          @columns = cols.map{|c| c.at(0)}
           process_result_set_no_convert(cols, result, &block)
         end
       ensure
@@ -816,13 +882,13 @@ module Sequel
       def process_result_set_convert(cols, result)
         while result.next
           row = {}
-          cols.each do |n, i, p|
+          cols.each do |n, i, ctn, p|
             v = result.getObject(i)
             row[n] = if v
               if p
                 p.call(v)
               elsif p.nil?
-                cols[i-1][2] = p = convert_type_proc(v)
+                cols[i-1][3] = p = convert_type_proc(v, ctn)
                 if p
                   p.call(v)
                 else
