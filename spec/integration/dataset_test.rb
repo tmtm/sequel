@@ -50,7 +50,7 @@ describe "Simple Dataset operations" do
   end
 
   specify "should have insert_multiple return primary key values" do
-    @ds.insert_multiple([{:number=>20}, {:number=>30}]).should == [2, 3]
+    @ds.extension(:sequel_3_dataset_methods).insert_multiple([{:number=>20}, {:number=>30}]).should == [2, 3]
     @ds.filter(:id=>2).get(:number).should == 20
     @ds.filter(:id=>3).get(:number).should == 30
   end
@@ -65,11 +65,11 @@ describe "Simple Dataset operations" do
   end
 
   specify "should graph correctly" do
-    @ds.graph(:items, {:id=>:id}, :table_alias=>:b).all.should == [{:items=>{:id=>1, :number=>10}, :b=>{:id=>1, :number=>10}}]
+    @ds.graph(:items, {:id=>:id}, :table_alias=>:b).extension(:graph_each).all.should == [{:items=>{:id=>1, :number=>10}, :b=>{:id=>1, :number=>10}}]
   end
 
   specify "should graph correctly with a subselect" do
-    @ds.from_self(:alias=>:items).graph(@ds.from_self, {:id=>:id}, :table_alias=>:b).all.should == [{:items=>{:id=>1, :number=>10}, :b=>{:id=>1, :number=>10}}]
+    @ds.from_self(:alias=>:items).graph(@ds.from_self, {:id=>:id}, :table_alias=>:b).extension(:graph_each).all.should == [{:items=>{:id=>1, :number=>10}, :b=>{:id=>1, :number=>10}}]
   end
 
   cspecify "should have insert work correctly when inserting a row with all NULL values", :hsqldb do
@@ -893,7 +893,7 @@ describe "Sequel::Dataset convenience methods" do
   
   it "#[]= should update matching rows" do
     @ds.insert(20, 10)
-    @ds[:a=>20] = {:b=>30}
+    @ds.extension(:sequel_3_dataset_methods)[:a=>20] = {:b=>30}
     @ds.all.should == [{:a=>20, :b=>30}]
   end
   
@@ -1335,25 +1335,21 @@ describe "Sequel::Dataset DSL support" do
     end
   end
   
-  specify "should work empty arrays with nulls and Sequel.empty_array_null_handling = true" do
-    begin
-      Sequel.empty_array_handle_nulls = false
-      @ds.insert(nil, nil)
-      @ds.filter(:a=>[]).all.should == []
-      @ds.exclude(:a=>[]).all.should == [{:a=>nil, :b=>nil}]
-      @ds.filter([:a, :b]=>[]).all.should == []
-      @ds.exclude([:a, :b]=>[]).all.should == [{:a=>nil, :b=>nil}]
+  specify "should work empty arrays with nulls and the empty_array_ignore_nulls extension" do
+    ds = @ds.extension(:empty_array_ignore_nulls)
+    ds.insert(nil, nil)
+    ds.filter(:a=>[]).all.should == []
+    ds.exclude(:a=>[]).all.should == [{:a=>nil, :b=>nil}]
+    ds.filter([:a, :b]=>[]).all.should == []
+    ds.exclude([:a, :b]=>[]).all.should == [{:a=>nil, :b=>nil}]
 
-      unless Sequel.guarded?(:mssql, :oracle, :db2)
-        # Some databases don't like boolean results in the select list
-        pr = proc{|r| r.is_a?(Integer) ? (r != 0) : r}
-        pr[@ds.get(Sequel.expr(:a=>[]))].should == false
-        pr[@ds.get(~Sequel.expr(:a=>[]))].should == true
-        pr[@ds.get(Sequel.expr([:a, :b]=>[]))].should == false
-        pr[@ds.get(~Sequel.expr([:a, :b]=>[]))].should == true
-      end
-    ensure
-      Sequel.empty_array_handle_nulls = true
+    unless Sequel.guarded?(:mssql, :oracle, :db2)
+      # Some databases don't like boolean results in the select list
+      pr = proc{|r| r.is_a?(Integer) ? (r != 0) : r}
+      pr[ds.get(Sequel.expr(:a=>[]))].should == false
+      pr[ds.get(~Sequel.expr(:a=>[]))].should == true
+      pr[ds.get(Sequel.expr([:a, :b]=>[]))].should == false
+      pr[ds.get(~Sequel.expr([:a, :b]=>[]))].should == true
     end
   end
 
@@ -1583,7 +1579,7 @@ describe "Dataset defaults and overrides" do
   before(:all) do
     @db = INTEGRATION_DB
     @db.create_table!(:a){Integer :a}
-    @ds = @db[:a].order(:a)
+    @ds = @db[:a].order(:a).extension(:set_overrides)
   end
   before do
     @ds.delete

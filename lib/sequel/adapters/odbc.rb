@@ -9,25 +9,6 @@ module Sequel
       DRV_NAME_GUARDS = '{%s}'.freeze
       DISCONNECT_ERRORS = /\A08S01/.freeze 
 
-      def initialize(opts)
-        super
-        case @opts[:db_type]
-        when 'mssql'
-          Sequel.ts_require 'adapters/odbc/mssql'
-          extend Sequel::ODBC::MSSQL::DatabaseMethods
-          @dataset_class = Sequel::ODBC::MSSQL::Dataset
-          set_mssql_unicode_strings
-        when 'progress'
-          Sequel.ts_require 'adapters/shared/progress'
-          extend Sequel::Progress::DatabaseMethods
-          extend_datasets(Sequel::Progress::DatasetMethods)
-        when 'db2'
-          Sequel.ts_require 'adapters/shared/db2'
-          extend ::Sequel::DB2::DatabaseMethods
-          extend_datasets ::Sequel::DB2::DatasetMethods
-        end
-      end
-
       def connect(server)
         opts = server_opts(server)
         if opts.include? :driver
@@ -75,10 +56,31 @@ module Sequel
           end
         end
       end
-      alias do execute_dui
+      def do(*a, &block)
+        Sequel::Deprecation.deprecate('Database#do', 'Please use Database#execute_dui')
+        execute_dui(*a, &block)
+      end
 
       private
       
+      def adapter_initialize
+        case @opts[:db_type]
+        when 'mssql'
+          Sequel.require 'adapters/odbc/mssql'
+          extend Sequel::ODBC::MSSQL::DatabaseMethods
+          self.dataset_class = Sequel::ODBC::MSSQL::Dataset
+          set_mssql_unicode_strings
+        when 'progress'
+          Sequel.require 'adapters/shared/progress'
+          extend Sequel::Progress::DatabaseMethods
+          extend_datasets(Sequel::Progress::DatasetMethods)
+        when 'db2'
+          Sequel.require 'adapters/shared/db2'
+          extend ::Sequel::DB2::DatabaseMethods
+          extend_datasets ::Sequel::DB2::DatasetMethods
+        end
+      end
+
       def connection_execute_method
         :do
       end

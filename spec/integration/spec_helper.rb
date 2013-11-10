@@ -14,6 +14,7 @@ begin
   require File.join(File.dirname(File.dirname(__FILE__)), 'spec_config.rb') unless defined?(INTEGRATION_DB)
 rescue LoadError
 end
+Sequel::Deprecation.backtrace_filter = lambda{|line, lineno| lineno < 4 || line =~ /_(spec|test)\.rb/}
 
 if ENV['SEQUEL_COLUMNS_INTROSPECTION']
   Sequel.extension :columns_introspection
@@ -21,7 +22,7 @@ if ENV['SEQUEL_COLUMNS_INTROSPECTION']
 end
 
 Sequel::Model.use_transactions = false
-Sequel::Model.cache_anonymous_models = false
+Sequel.cache_anonymous_models = false
 
 unless defined?(RSpec)
   module Spec::Matchers

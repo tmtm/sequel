@@ -55,7 +55,7 @@ describe "Sequel::Model()" do
   end
 
   it "should return a model subclass associated to the given database if given a database" do
-    db = Sequel::Database.new
+    db = Sequel.mock
     c = Sequel::Model(db)
     c.superclass.should == Sequel::Model
     c.db.should == db
@@ -68,10 +68,10 @@ describe "Sequel::Model()" do
 
   describe "reloading" do
     before do
-      Sequel::Model.cache_anonymous_models = true
+      Sequel.cache_anonymous_models = true
     end
     after do
-      Sequel::Model.cache_anonymous_models = false
+      Sequel.cache_anonymous_models = false
       Object.send(:remove_const, :Album) if defined?(::Album)
     end
 
@@ -132,7 +132,7 @@ describe "Sequel::Model()" do
     end
 
     it "should raise an exception if anonymous model caching is disabled" do
-      Sequel::Model.cache_anonymous_models = false
+      Sequel.cache_anonymous_models = false
       proc do
         class ::Album < Sequel::Model(@db[Sequel.identifier(:table)]); end
         class ::Album < Sequel::Model(@db[Sequel.identifier(:table)]); end
@@ -308,7 +308,7 @@ describe Sequel::Model, "constructors" do
   end
   
   it "should have dataset row_proc create an existing object" do
-    @m.dataset = Sequel::Dataset.new(nil)
+    @m.dataset = Sequel.mock.dataset
     o = @m.dataset.row_proc.call(:a=>1)
     o.should be_a_kind_of(@m)
     o.values.should == {:a=>1}
@@ -329,7 +329,7 @@ describe Sequel::Model, "constructors" do
     o.new?.should be_false
   end
   
-  it "should have .new with a second true argument create an existing object" do
+  qspecify "should have .new with a second true argument create an existing object" do
     o = @m.new({:a=>1}, true)
     o.should be_a_kind_of(@m)
     o.values.should == {:a=>1}
@@ -520,6 +520,7 @@ end
 describe Sequel::Model, "attribute accessors" do
   before do
     db = Sequel.mock
+    def db.supports_schema_parsing?() true end
     def db.schema(*)
       [[:x, {:type=>:integer}], [:z, {:type=>:integer}]]
     end
@@ -616,7 +617,7 @@ describe Sequel::Model, ".[]" do
     sqls.first.should =~ /^SELECT \* FROM items WHERE \((\(node_id = 3921\) AND \(kind = 201\))|(\(kind = 201\) AND \(node_id = 3921\))\) LIMIT 1$/
   end
   
-  it "should work correctly for composite primary key specified as separate arguments" do
+  qspecify "should work correctly for composite primary key specified as separate arguments" do
     @c.set_primary_key :node_id, :kind
     @c[3921, 201].should be_a_kind_of(@c)
     sqls = MODEL_DB.sqls
@@ -637,9 +638,23 @@ describe "Model.db_schema" do
       def self.columns; orig_columns; end
     end
     @db = Sequel.mock
+    def @db.supports_schema_parsing?() true end
     @dataset = @db[:items]
   end
   
+  specify "should not call database's schema if it isn't supported" do
+    def @db.supports_schema_parsing?() false end
+    def @db.schema(table, opts = {})
+      raise Sequel::Error
+    end
+    @dataset.instance_variable_set(:@columns, [:x, :y])
+
+    @c.dataset = @dataset
+    @c.db_schema.should == {:x=>{}, :y=>{}}
+    @c.columns.should == [:x, :y]
+    @c.dataset.instance_variable_get(:@columns).should == [:x, :y]
+  end
+
   specify "should use the database's schema and set the columns and dataset columns" do
     def @db.schema(table, opts = {})
       [[:x, {:type=>:integer}], [:y, {:type=>:string}]]

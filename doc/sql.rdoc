@@ -93,14 +93,14 @@ Sequel ではほとんどどこでもリテラル文字列で提供されるリ�
 
 == SQL 表現を Sequel に変換する
 
-このガイドの残りは、クエリ表現に Sequel の DSL を使用したくて、SQL でクエリを書く方法は知っているが、Sequel でそれを書く方法が定かでないと仮定しています。
+このガイドの残りは、クエリ表現に Sequel の DSL を使用したくて、SQL でクエリを書く方法は知っているが、Sequel の DSL でそれを書く方法が定かでない人向けです。
 
 この節では、特定の SQL 表現が Sequel でどのように操作されるかを説明します。
 次の節では、データセットのメソッド連結を使用して、クエリをどのように生成するかを議論します。
 
 === <tt>Database#literal</tt>
 
-始める前に、<tt>Database#literal</tt> メソッドに精通していることが重要だと考えます。これは与えられた表現で使用される SQL を返します:
+<tt>Database#literal</tt> メソッドに精通していることが重要です。これは与えられた表現で使用される SQL を返します:
 
   DB.literal(1)
   # => "1"
@@ -109,7 +109,7 @@ Sequel ではほとんどどこでもリテラル文字列で提供されるリ�
   DB.literal('string')
   # => "'string'"
 
-様々なオブジェクトがどのように SQL にリテラル化されるかを見るために試してみることをお勧めします。
+様々なオブジェクトがどのように SQL にリテラル化されるかを見るために試してみてください。
 
 === データベースロガー
 
@@ -360,17 +360,14 @@ Sequel は、ほとんどの Sequel 固有表現オブジェクトで、AND と 
   Sequel.expr(:column1=>1) | {:column2=>2} # (("column1" = 1) OR ("column2" = 2))
   (Sequel.function(:func) > 1) & :column3 # ((func() > 1) AND "column3")
 
-注意: 最後のステートメントでは括弧を使用しています。これを省略すると、期待したものが得られません:
+注意: 最後のステートメントでは括弧を使用しています。これを省略すると、期待したものが得られません。
+& は > よりも優先度が高いからです:
 
-  Sequel.function(:func) > 1 & :column3 # (func() > 1)
+  Sequel.function(:func) > 1 & :column3
 
-これは & が > よりも優先度が高いためです。そのため次のようにパースされます:
+これは次のようにパースされます:
 
   Sequel.function(:func) > (1 & :column3)
-
-この場合、<tt>:column3.to_int</tt> は奇数を返すので:
-
-  1 & :column3 # => 1
 
 <tt>Sequel.&</tt> と <tt>Sequel.|</tt> メソッドも使用できます:
 
@@ -527,7 +524,7 @@ Sequel は <tt>Sequel.case</tt> メソッドを使用することで SQL CASE �
   Sequel.case({:c=>1, :d=>2}, 0) # (CASE WHEN "c" THEN 1 WHEN "d" THEN 2 ELSE 0 END)
   Sequel.case([[:c, 1], [:d, 2]], 0) # (CASE WHEN "c" THEN 1 WHEN "d" THEN 2 ELSE 0 END)
 
-二番目の引数を CASE に与えると、CASE と WHEN の間で使用されます:
+3番目の引数を <tt>Sequel.case</tt> に与えると、CASE と WHEN の間で使用されます:
 
   Sequel.case({2=>1, 3=>5}, 0, :column) # (CASE column WHEN 2 THEN 1 WHEN 3 THEN 5 ELSE 0 END)
 
@@ -560,9 +557,9 @@ Sequel ではメソッド連結で SQL クエリを構築できます。
 
   DB[:albums, :artists] # SELECT * FROM albums, artists
 
-どの FROM テーブルからも SELECT したくない場合は、引数を使用しません:
+どの FROM テーブルからも SELECT したくない場合は、dataset を呼ぶだけです:
 
-  DB[] # SELECT *
+  DB.dataset # SELECT *
 
 === メソッド連結
 

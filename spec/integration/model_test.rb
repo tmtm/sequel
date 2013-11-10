@@ -125,7 +125,7 @@ describe "Sequel::Model basic support" do
   specify "#exists? should return whether the item is still in the database" do
     i = Item.create(:name=>'J')
     i.exists?.should == true
-    Item.delete
+    Item.dataset.delete
     i.exists?.should == false
   end
 
@@ -139,10 +139,10 @@ describe "Sequel::Model basic support" do
     i = Item.create(:name=>'J', :num=>1)
     Item.all.should == [Item.load(:id=>1, :name=>'J', :num=>1)]
     i.set(:name=>'K', :num=>2)
-    i.save(:name)
+    i.save(:columns=>:name)
     Item.all.should == [Item.load(:id=>1, :name=>'K', :num=>1)]
     i.set(:name=>'L')
-    i.save(:num)
+    i.save(:columns=>:num)
     Item.all.should == [Item.load(:id=>1, :name=>'K', :num=>2)]
   end
   

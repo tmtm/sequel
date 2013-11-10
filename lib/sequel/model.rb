@@ -35,7 +35,7 @@ module Sequel
   #     dataset # => DB1[:comments]
   #   end
   def self.Model(source)
-    if Sequel::Model.cache_anonymous_models && (klass = Sequel.synchronize{Model::ANONYMOUS_MODEL_CLASSES[source]})
+    if cache_anonymous_models && (klass = Sequel.synchronize{Model::ANONYMOUS_MODEL_CLASSES[source]})
       return klass
     end
     klass = if source.is_a?(Database)
@@ -45,8 +45,17 @@ module Sequel
     else
       Class.new(Model).set_dataset(source)
     end
-    Sequel.synchronize{Model::ANONYMOUS_MODEL_CLASSES[source] = klass} if Sequel::Model.cache_anonymous_models
+    Sequel.synchronize{Model::ANONYMOUS_MODEL_CLASSES[source] = klass} if cache_anonymous_models
     klass
+  end
+
+  @cache_anonymous_models = true
+
+  class << self
+    # Whether to cache the anonymous models created by Sequel::Model().  This is
+    # required for reloading them correctly (avoiding the superclass mismatch).  True
+    # by default for backwards compatibility.
+    attr_accessor :cache_anonymous_models
   end
 
   # <tt>Sequel::Model</tt> is an object relational mapper built on top of Sequel core.  Each
@@ -63,16 +72,13 @@ module Sequel
   # You can set the +SEQUEL_NO_ASSOCIATIONS+ constant or environment variable to
   # make Sequel not load the associations plugin by default.
   class Model
-    # Cache anonymous models created by Sequel::Model()
-    @cache_anonymous_models = true
-
     # Map that stores model classes created with <tt>Sequel::Model()</tt>, to allow the reopening
     # of classes when dealing with code reloading.
     ANONYMOUS_MODEL_CLASSES = {}
 
     # Class methods added to model that call the method of the same name on the dataset
     DATASET_METHODS = (Dataset::ACTION_METHODS + Dataset::QUERY_METHODS +
-      [:each_page, :each_server, :print, :destroy, :with_pk, :with_pk!]) - [:and, :or, :[], :[]=, :columns, :columns!]
+      [:each_server]) - [:and, :or, :[], :[]=, :columns, :columns!, :delete, :update, :add_graph_aliases]
     
     # Class instance variables to set to nil when a subclass is created, for -w compliance
     EMPTY_INSTANCE_VARIABLES = [:@overridable_methods_module, :@db]

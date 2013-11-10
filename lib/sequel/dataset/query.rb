@@ -41,6 +41,7 @@ module Sequel
       set_defaults set_graph_aliases set_overrides unfiltered ungraphed ungrouped union
       unlimited unordered where with with_recursive with_sql
     METHS
+    # REMOVE40: query paginate set_defaults set_overrides
 
     # Register an extension callback for Dataset objects.  ext should be the
     # extension name symbol, and mod should either be a Module that the
@@ -69,18 +70,30 @@ module Sequel
     #
     #   DB[:table].filter(:a).and(:b) # SELECT * FROM table WHERE a AND b
     def and(*cond, &block)
-      raise(InvalidOperation, "No existing filter found.") unless @opts[:having] || @opts[:where]
-      filter(*cond, &block)
+      unless @opts[:having] || @opts[:where]
+        Sequel::Deprecation.deprecate('Dataset#and will no longer raise for an unfilered dataset starting in Sequel 4.')
+        raise(InvalidOperation, "No existing filter found.")
+      end
+      if @opts[:having]
+        Sequel::Deprecation.deprecate('Dataset#and will no longer modify the HAVING clause starting in Sequel 4.  Switch to using Dataset#having or use the filter_having extension.')
+        having(*cond, &block)
+      else
+        where(*cond, &block)
+      end
     end
     
     # Returns a new clone of the dataset with with the given options merged.
     # If the options changed include options in COLUMN_CHANGE_OPTS, the cached
     # columns are deleted.  This method should generally not be called
     # directly by user code.
-    def clone(opts = {})
+    def clone(opts = nil)
       c = super()
-      c.opts = @opts.merge(opts)
-      c.instance_variable_set(:@columns, nil) if opts.keys.any?{|o| COLUMN_CHANGE_OPTS.include?(o)}
+      if opts
+        c.instance_variable_set(:@opts, @opts.merge(opts))
+        c.instance_variable_set(:@columns, nil) if @columns && !opts.each_key{|o| break if COLUMN_CHANGE_OPTS.include?(o)}
+      else
+        c.instance_variable_set(:@opts, @opts.dup)
+      end
       c
     end
 
@@ -116,7 +129,10 @@ module Sequel
     #   DB[:items].except(DB[:other_items], :alias=>:i)
     #   # SELECT * FROM (SELECT * FROM items EXCEPT SELECT * FROM other_items) AS i
     def except(dataset, opts={})
-      opts = {:all=>opts} unless opts.is_a?(Hash)
+      unless opts.is_a?(Hash)
+        Sequel::Deprecation.deprecate('Passing a non-hash as the second argument to Dataset#except', "Please switch to an options hash with the :all option")
+        opts = {:all=>opts}
+      end
       raise(InvalidOperation, "EXCEPT not supported") unless supports_intersect_except?
       raise(InvalidOperation, "EXCEPT ALL not supported") if opts[:all] && !supports_intersect_except_all?
       compound_clone(:except, dataset, opts)
@@ -131,6 +147,7 @@ module Sequel
     #   DB[:items].exclude(:category => 'software', :id=>3)
     #   # SELECT * FROM items WHERE ((category != 'software') OR (id != 3))
     def exclude(*cond, &block)
+      Sequel::Deprecation.deprecate('Dataset#exclude will no longer modify the HAVING clause starting in Sequel 4.  Switch to using Dataset#exclude_having or use the filter_having extension.') if @opts[:having]
       _filter_or_exclude(true, @opts[:having] ? :having : :where, *cond, &block)
     end
 
@@ -214,6 +231,7 @@ module Sequel
     #
     # See the the {"Dataset Filtering" guide}[link:files/doc/dataset_filtering_rdoc.html] for more examples and details.
     def filter(*cond, &block)
+      Sequel::Deprecation.deprecate('Dataset#filter will no longer modify the HAVING clause starting in Sequel 4.  Switch to using Dataset#having or use the filter_having extension.') if @opts[:having]
       _filter(@opts[:having] ? :having : :where, *cond, &block)
     end
     
@@ -238,6 +256,7 @@ module Sequel
       source.each do |s|
         case s
         when Hash
+          Sequel::Deprecation.deprecate('Dataset#from will no longer treat an input hash as an alias specifier.  Switch to aliasing using Sequel.as or use the hash_aliases extension.')
           s.each{|k,v| sources << SQL::AliasedExpression.new(k,v)}
         when Dataset
           if hoist_cte?(s)
@@ -406,7 +425,10 @@ module Sequel
     #   DB[:items].intersect(DB[:other_items], :alias=>:i)
     #   # SELECT * FROM (SELECT * FROM items INTERSECT SELECT * FROM other_items) AS i
     def intersect(dataset, opts={})
-      opts = {:all=>opts} unless opts.is_a?(Hash)
+      unless opts.is_a?(Hash)
+        Sequel::Deprecation.deprecate('Passing a non-hash as the second argument to Dataset#intersect', "Please switch to an options hash with the :all option")
+        opts = {:all=>opts}
+      end
       raise(InvalidOperation, "INTERSECT not supported") unless supports_intersect_except?
       raise(InvalidOperation, "INTERSECT ALL not supported") if opts[:all] && !supports_intersect_except_all?
       compound_clone(:intersect, dataset, opts)
@@ -421,7 +443,10 @@ module Sequel
     #   # SELECT * FROM items WHERE ((category != 'software') OR (id != 3))
     def invert
       having, where = @opts[:having], @opts[:where]
-      raise(Error, "No current filter") unless having || where
+      unless having || where
+        Sequel::Deprecation.deprecate('Dataset#invert will no longer raise for an unfilered dataset starting in Sequel 4.')
+        raise(Error, "No current filter")
+      end
       o = {}
       o[:having] = SQL::BooleanExpression.invert(having) if having
       o[:where] = SQL::BooleanExpression.invert(where) if where
@@ -464,7 +489,8 @@ module Sequel
     #     the last joined or primary table is used.
     #   * :qualify - Can be set to false to not do any implicit qualification.  Can be set
     #     to :deep to use the Qualifier AST Transformer, which will attempt to qualify
-    #     subexpressions of the expression tree.
+    #     subexpressions of the expression tree.  Defaults to the value of
+    #     default_join_table_qualification.
     # * block - The block argument should only be given if a JOIN with an ON clause is used,
     #   in which case it yields the table alias/name for the table currently being joined,
     #   the table alias/name for the last joined (or first table), and an array of previous
@@ -505,13 +531,14 @@ module Sequel
         last_alias = options[:implicit_qualifier]
         qualify_type = options[:qualify]
       when Symbol, String, SQL::Identifier
+        Sequel::Deprecation.deprecate('Passing a non-hash as the options hash to Dataset#join_table', "Please switch to an options hash with the :table_alias option")
         table_alias = options
         last_alias = nil 
       else
         raise Error, "invalid options format for join_table: #{options.inspect}"
       end
 
-      if Dataset === table
+      if table.is_a?(Dataset)
         if table_alias.nil?
           table_alias_num = (@opts[:num_dataset_sources] || 0) + 1
           table_alias = dataset_alias(table_alias_num)
@@ -532,6 +559,7 @@ module Sequel
         last_alias ||= @opts[:last_joined_table] || first_source_alias
         if Sequel.condition_specifier?(expr)
           expr = expr.collect do |k, v|
+            qualify_type = default_join_table_qualification if qualify_type.nil?
             case qualify_type
             when false
               nil # Do no qualification
@@ -578,7 +606,7 @@ module Sequel
     def limit(l, o = (no_offset = true; nil))
       return from_self.limit(l, o) if @opts[:sql]
 
-      if Range === l
+      if l.is_a?(Range)
         o = l.first
         l = l.last - l.first + (l.exclude_end? ? 0 : 1)
       end
@@ -630,9 +658,17 @@ module Sequel
     #   DB[:items].filter(:a).or(:b) # SELECT * FROM items WHERE a OR b
     def or(*cond, &block)
       clause = (@opts[:having] ? :having : :where)
-      raise(InvalidOperation, "No existing filter found.") unless @opts[clause]
+      unless @opts[clause]
+        Sequel::Deprecation.deprecate('Dataset#or will no longer raise for an unfilered dataset starting in Sequel 4.')
+        raise(InvalidOperation, "No existing filter found.")
+      end
+      Sequel::Deprecation.deprecate('Dataset#or will no longer modify the HAVING clause starting in Sequel 4.  You can use the filter_having extension to continue to use the current behavior.') if clause == :having
       cond = cond.first if cond.size == 1
-      clone(clause => SQL::BooleanExpression.new(:OR, @opts[clause], filter_expr(cond, &block)))
+      if cond.respond_to?(:empty?) && cond.empty? && !block
+        clone
+      else
+        clone(clause => SQL::BooleanExpression.new(:OR, @opts[clause], filter_expr(cond, &block)))
+      end
     end
 
     # Returns a copy of the dataset with the order changed. If the dataset has an
@@ -692,7 +728,14 @@ module Sequel
     #   DB[:items].filter(:id=>1).qualify(:i)
     #   # SELECT i.* FROM items WHERE (i.id = 1)
     def qualify(table=first_source)
-      qualify_to(table)
+      o = @opts
+      return clone if o[:sql]
+      h = {}
+      (o.keys & QUALIFY_KEYS).each do |k|
+        h[k] = qualified_expression(o[k], table)
+      end
+      h[:select] = [SQL::ColumnAll.new(table)] if !o[:select] || o[:select].empty?
+      clone(h)
     end
 
     # Return a copy of the dataset with unqualified identifiers in the
@@ -703,14 +746,8 @@ module Sequel
     #   DB[:items].filter(:id=>1).qualify_to(:i)
     #   # SELECT i.* FROM items WHERE (i.id = 1)
     def qualify_to(table)
-      o = @opts
-      return clone if o[:sql]
-      h = {}
-      (o.keys & QUALIFY_KEYS).each do |k|
-        h[k] = qualified_expression(o[k], table)
-      end
-      h[:select] = [SQL::ColumnAll.new(table)] if !o[:select] || o[:select].empty?
-      clone(h)
+      Sequel::Deprecation.deprecate('Dataset#qualify_to', 'Switch to Dataset#qualify or use the sequel_3_dataset_methods extension')
+      qualify(table)
     end
     
     # Qualify the dataset to its current first source.  This is useful
@@ -722,7 +759,8 @@ module Sequel
     #   DB[:items].filter(:id=>1).qualify_to_first_source
     #   # SELECT items.* FROM items WHERE (items.id = 1)
     def qualify_to_first_source
-      qualify_to(first_source)
+      Sequel::Deprecation.deprecate('Dataset#qualify_to_first_source', 'Switch to Dataset#qualify or use the sequel_3_dataset_methods extension')
+      qualify
     end
     
     # Modify the RETURNING clause, only supported on a few databases.  If returning
@@ -765,7 +803,12 @@ module Sequel
       virtual_row_columns(columns, block)
       m = []
       columns.each do |i|
-        i.is_a?(Hash) ? m.concat(i.map{|k, v| SQL::AliasedExpression.new(k,v)}) : m << i
+        if i.is_a?(Hash)
+          Sequel::Deprecation.deprecate('Dataset#select will no longer treat an input hash as an alias specifier.  Switch to aliasing using Sequel.as or use the hash_aliases extension.')
+          m.concat(i.map{|k, v| SQL::AliasedExpression.new(k,v)})
+        else
+          m << i
+        end
       end
       clone(:select => m)
     end
@@ -825,7 +868,11 @@ module Sequel
     #   DB[:items].select(:a).select_more(:b) # SELECT a, b FROM items
     #   DB[:items].select_more(:b) # SELECT b FROM items
     def select_more(*columns, &block)
-      columns = @opts[:select] + columns if @opts[:select]
+      if @opts[:select]
+        columns = @opts[:select] + columns
+      else
+        Sequel::Deprecation.deprecate('Dataset#select_more will no longer remove the wildcard selection from the Dataset starting in Sequel 4.  Switch to using Dataset#select if you want that behavior.')
+      end
       select(*columns, &block)
     end
     
@@ -849,6 +896,7 @@ module Sequel
     #   DB[:items].set_defaults(:a=>'a', :c=>'c').insert(:a=>'d', :b=>'b')
     #   # INSERT INTO items (a, c, b) VALUES ('d', 'c', 'b')
     def set_defaults(hash)
+      Sequel::Deprecation.deprecate('Dataset#set_defaults', 'Please use the dataset_set_overrides extension if you want to continue using it')
       clone(:defaults=>(@opts[:defaults]||{}).merge(hash))
     end
 
@@ -859,6 +907,7 @@ module Sequel
     #   DB[:items].set_overrides(:a=>'a', :c=>'c').insert(:a=>'d', :b=>'b')
     #   # INSERT INTO items (a, c, b) VALUES ('a', 'c', 'b')
     def set_overrides(hash)
+      Sequel::Deprecation.deprecate('Dataset#set_overrides', 'Please use the dataset_set_overrides extension if you want to continue using it')
       clone(:overrides=>hash.merge(@opts[:overrides]||{}))
     end
     
@@ -911,7 +960,10 @@ module Sequel
     #   DB[:items].union(DB[:other_items], :alias=>:i)
     #   # SELECT * FROM (SELECT * FROM items UNION SELECT * FROM other_items) AS i
     def union(dataset, opts={})
-      opts = {:all=>opts} unless opts.is_a?(Hash)
+      unless opts.is_a?(Hash)
+        Sequel::Deprecation.deprecate('Passing a non-hash as the second argument to Dataset#union', "Please switch to an options hash with the :all option")
+        opts = {:all=>opts}
+      end
       compound_clone(:union, dataset, opts)
     end
     
@@ -1051,6 +1103,11 @@ module Sequel
       _filter_or_exclude(false, clause, *cond, &block)
     end
 
+    # The default :qualify option to use for join tables if one is not specified.
+    def default_join_table_qualification
+      :symbol
+    end
+    
     # SQL expression object based on the expr type.  See +filter+.
     def filter_expr(expr = nil, &block)
       expr = nil if expr == []
@@ -1129,7 +1186,14 @@ module Sequel
     # Treat the +block+ as a virtual_row block if not +nil+ and
     # add the resulting columns to the +columns+ array (modifies +columns+).
     def virtual_row_columns(columns, block)
-      columns.concat(Array(Sequel.virtual_row(&block))) if block
+      if block
+        v = Sequel.virtual_row(&block)
+        if v.is_a?(Array)
+          columns.concat(v)
+        else
+          columns << v
+        end
+      end
     end
   end
 end

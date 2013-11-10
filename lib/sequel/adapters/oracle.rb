@@ -21,13 +21,6 @@ module Sequel
       # Hash of conversion procs for this database.
       attr_reader :conversion_procs
 
-      def initialize(opts={})
-        super
-        @autosequence = opts[:autosequence]
-        @primary_key_sequences = {}
-        @conversion_procs = ORACLE_TYPES.dup
-      end
-
       def connect(server)
         opts = server_opts(server)
         if opts[:database]
@@ -71,7 +64,10 @@ module Sequel
       def execute(sql, opts={}, &block)
         _execute(nil, sql, opts, &block)
       end
-      alias do execute
+      def do(*a, &block)
+        Sequel::Deprecation.deprecate('Database#do', 'Please use Database#execute')
+        execute_dui(*a, &block)
+      end
 
       def execute_insert(sql, opts={})
         _execute(:insert, sql, opts)
@@ -107,6 +103,12 @@ module Sequel
             raise_error(e)
           end
         end
+      end
+
+      def adapter_initialize
+        @autosequence = @opts[:autosequence]
+        @primary_key_sequences = {}
+        @conversion_procs = ORACLE_TYPES.dup
       end
 
       PS_TYPES = {'string'.freeze=>String, 'integer'.freeze=>Integer, 'float'.freeze=>Float,

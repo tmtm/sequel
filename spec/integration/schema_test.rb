@@ -4,13 +4,11 @@ describe "Database schema parser" do
   before do
     @iom = INTEGRATION_DB.identifier_output_method
     @iim = INTEGRATION_DB.identifier_input_method
-    @defsch = INTEGRATION_DB.default_schema
     @qi = INTEGRATION_DB.quote_identifiers?
   end
   after do
     INTEGRATION_DB.identifier_output_method = @iom
     INTEGRATION_DB.identifier_input_method = @iim
-    INTEGRATION_DB.default_schema = @defsch
     INTEGRATION_DB.quote_identifiers = @qi
     INTEGRATION_DB.drop_table?(:items)
   end
@@ -19,7 +17,6 @@ describe "Database schema parser" do
     INTEGRATION_DB.identifier_output_method = :reverse
     INTEGRATION_DB.identifier_input_method = :reverse
     INTEGRATION_DB.quote_identifiers = true
-    INTEGRATION_DB.default_schema = nil if INTEGRATION_DB.default_schema
     INTEGRATION_DB.create_table!(:items){Integer :number}
     begin
       INTEGRATION_DB.schema(:items, :reload=>true).should be_a_kind_of(Array)
@@ -33,7 +30,6 @@ describe "Database schema parser" do
     INTEGRATION_DB.identifier_output_method = :reverse
     INTEGRATION_DB.identifier_input_method = :reverse
     INTEGRATION_DB.quote_identifiers = true
-    INTEGRATION_DB.default_schema = nil if INTEGRATION_DB.default_schema
     INTEGRATION_DB.create_table!(:items){Integer :number}
     INTEGRATION_DB.identifier_output_method = @iom
     INTEGRATION_DB.identifier_input_method = @iim
@@ -148,15 +144,6 @@ describe "Database schema parser" do
   end
 end if INTEGRATION_DB.supports_schema_parsing?
 
-test_indexes = begin
-  INTEGRATION_DB.drop_table?(:blah)
-  INTEGRATION_DB.indexes(:blah)
-  true
-rescue Sequel::NotImplemented
-  false
-rescue
-  true
-end
 describe "Database index parsing" do
   after do
     INTEGRATION_DB.drop_table?(:items)
@@ -188,17 +175,8 @@ describe "Database index parsing" do
     INTEGRATION_DB.create_table!(:items){Integer :n; Integer :a; primary_key [:n, :a]}
     INTEGRATION_DB.indexes(:items).should == {}
   end
-end if test_indexes
+end if INTEGRATION_DB.supports_index_parsing?
 
-test_foreign_key_list = begin
-  INTEGRATION_DB.drop_table?(:blah)
-  INTEGRATION_DB.foreign_key_list(:blah)
-  true
-rescue Sequel::NotImplemented
-  false
-rescue
-  true
-end
 describe "Database foreign key parsing" do
   before do
     @db = INTEGRATION_DB
@@ -253,7 +231,7 @@ describe "Database foreign key parsing" do
     @db.create_table!(:b, :engine=>:InnoDB){Integer :e; Integer :f; foreign_key [:e, :f], :a; foreign_key [:f, :e], :a, :key=>[:c, :b]}
     @pr[:b, [[:e, :f], :a, [:pk, :b, :c]], [[:f, :e], :a, [:c, :b]]]
   end
-end if test_foreign_key_list
+end if INTEGRATION_DB.supports_foreign_key_parsing?
 
 describe "Database schema modifiers" do
   before do
@@ -686,12 +664,6 @@ describe "Database schema modifiers" do
   end if INTEGRATION_DB.supports_deferrable_constraints?
 end
 
-test_tables = begin
-  INTEGRATION_DB.tables
-  true
-rescue Sequel::NotImplemented
-  false
-end
 describe "Database#tables" do
   before do
     class ::String
@@ -726,14 +698,8 @@ describe "Database#tables" do
     @db.identifier_input_method = :xxxxx
     @db.tables.each{|t| t.to_s.should =~ /\Ax{5}\d+\z/}
   end
-end if test_tables
+end if INTEGRATION_DB.supports_table_listing?
 
-test_views = begin
-  INTEGRATION_DB.views
-  true
-rescue Sequel::NotImplemented
-  false
-end
 describe "Database#views" do
   before do
     class ::String
@@ -768,4 +734,4 @@ describe "Database#views" do
     @db.identifier_input_method = :xxxxx
     @db.views.each{|t| t.to_s.should =~ /\Ax{5}\d+\z/}
   end
-end if test_views
+end if INTEGRATION_DB.supports_view_listing?

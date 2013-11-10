@@ -87,6 +87,8 @@ module Sequel
 
     # Methods shared by Database instances that connect to PostgreSQL.
     module DatabaseMethods
+      extend Sequel::Database::ResetIdentifierMangling
+
       EXCLUDE_SCHEMAS = /pg_*|information_schema/i
       PREPARED_ARG_PLACEHOLDER = LiteralString.new('$').freeze
       RE_CURRVAL_ERROR = /currval of sequence "(.*)" is not yet defined in this session|relation "(.*)" does not exist/.freeze
@@ -488,7 +490,7 @@ module Sequel
       # Options:
       # :qualify :: Return the tables as Sequel::SQL::QualifiedIdentifier instances,
       #             using the schema the table is located in as the qualifier.
-      # :schema :: The schema to search (default_schema by default)
+      # :schema :: The schema to search
       # :server :: The server to use
       def tables(opts={}, &block)
         pg_class_relname('r', opts, &block)
@@ -506,7 +508,7 @@ module Sequel
       # Options:
       # :qualify :: Return the views as Sequel::SQL::QualifiedIdentifier instances,
       #             using the schema the view is located in as the qualifier.
-      # :schema :: The schema to search (default_schema by default)
+      # :schema :: The schema to search
       # :server :: The server to use
       def views(opts={})
         pg_class_relname('v', opts)
@@ -598,6 +600,10 @@ module Sequel
         sqls << "SET standard_conforming_strings = ON" if typecast_value_boolean(@opts.fetch(:force_standard_strings, Postgres.force_standard_strings))
 
         if (cmm = @opts.fetch(:client_min_messages, Postgres.client_min_messages)) && !cmm.to_s.empty?
+          cmm = cmm.to_s.upcase.strip
+          unless VALID_CLIENT_MIN_MESSAGES.include?(cmm)
+            Sequel::Deprecation.deprecate("Using an unsupported client_min_messages setting will raise an Error in Sequel 4.")
+          end
           sqls << "SET client_min_messages = '#{cmm.to_s.upcase}'"
         end
 
@@ -803,7 +809,7 @@ module Sequel
       # If opts includes a :schema option, or a default schema is used, restrict the dataset to
       # that schema.  Otherwise, just exclude the default PostgreSQL schemas except for public.
       def filter_schema(ds, opts)
-        if schema = opts[:schema] || default_schema
+        if schema = opts[:schema] || _default_schema
           ds.filter(:pg_namespace__nspname=>schema.to_s)
         else
           ds.exclude(:pg_namespace__nspname=>EXCLUDE_SCHEMAS)
@@ -1178,8 +1184,12 @@ module Sequel
         else
           sql = 'LOCK TABLE '
           source_list_append(sql, @opts[:from])
+          mode = mode.to_s.upcase.strip
+          unless LOCK_MODES.include?(mode)
+            Sequel::Deprecation.deprecate("Calling Dataset#lock with an unsupported lock mode will raise an Error in Sequel 4.")
+          end
           sql << " IN #{mode} MODE"
-          @db.execute(sql, opts) # lock without a transaction
+          @db.execute(sql, opts)
         end
         nil
       end

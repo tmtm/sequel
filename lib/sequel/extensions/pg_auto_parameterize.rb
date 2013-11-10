@@ -91,6 +91,7 @@ module Sequel
       module DatabaseMethods
         # Extend the database's datasets with the necessary code.
         def self.extended(db)
+          Sequel::Deprecation.deprecate('The pg_auto_parameterize extension', 'Please stop loading it') unless defined?(SEQUEL_EXTENSIONS_NO_DEPRECATION_WARNING)
           db.extend_datasets(DatasetMethods)
         end
 

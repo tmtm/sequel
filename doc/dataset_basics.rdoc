@@ -79,25 +79,24 @@ FROM:: from, from_self
 JOIN:: join, left_join, right_join, full_join, natural_join, natural_left_join, natural_right_join, natural_full_join, cross_join, inner_join, left_outer_join, right_outer_join, full_outer_join, join_table
 WHERE:: where, filter, exclude, exclude_where, and, or, grep, invert, unfiltered
 GROUP:: group, group_by, group_and_count, select_group, ungrouped
-HAVING:: having, filter, exclude, exclude_having, and, or, grep, invert, unfiltered
+HAVING:: having, exclude_having, invert, unfiltered
 ORDER:: order, order_by, order_append, order_prepend, order_more, reverse, reverse_order, unordered
 LIMIT:: limit, unlimited
 混合:: union, intersect, except
 ロック:: for_update, lock_style
 一般的なテーブル表現:: with, with_recursive
-修飾:: qualify, qualify_to, qualify_to_first_source
-挿入:: set_defaults, set_overrides
-その他:: clone, distinct, naked, server, with_sql
+その他:: clone, distinct, naked, qualify, server, with_sql
 
 === データベース上でコードを実行するメソッド
 
 一般に使用されるその他のデータセットメソッドの多くは、データベース上でデータセットの SQL を実行します:
 
-SELECT (全レコード):: all, each, map, to_hash, to_hash_groups, select_map, select_order_map, select_hash, select_hash_groups, to_csv
-SELECT (最初のレコード):: first, last, get, []
+SELECT (全レコード):: all, each, map, to_hash, to_hash_groups, select_map, select_order_map, select_hash, select_hash_groups
+SELECT (最初のレコード):: first, last, [], single_record
+SELECT (単一の値):: get, single_value
 SELECT (集約):: count, avg, max, min, sum, range, interval
-INSERT:: insert, <<, import, multi_insert, insert_multiple
-UPDATE:: update, set, []=
+INSERT:: insert, <<, import, multi_insert
+UPDATE:: update
 DELETE:: delete
 その他:: columns, columns!, truncate
 

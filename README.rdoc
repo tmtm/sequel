@@ -30,7 +30,6 @@ Sequel はシンプルで柔軟でパワフルな、Ruby の SQL データベー
   
 == 短い例
 
-  require 'rubygems'
   require 'sequel'
   
   DB = Sequel.sqlite # メモリーデータベース
@@ -112,6 +111,15 @@ Sequel は +map+ メソッドのような、データセットからデータを
 接続にブロックを記述できます。ブロックが終了するとデータベースから切断されます:
 
   Sequel.connect('postgres://user:password@host:port/database_name'){|db| db[:posts].delete}
+
+=== The DB convention
+
+Throughout Sequel's documentation, you will see the +DB+ constant used to refer to the Sequel::Database instance you create.
+This reflects the recommendation that for an app with a single Sequel::Database instance, the Sequel convention is to store
+the instance in the +DB+ constant.  This is just a convention, it's not required, but it is recommended.
+
+Note that some frameworks that use Sequel may create the Sequel::Database instance for you, and you might not know
+how to access it.  In most cases, you can access the Sequel::Database instance through <tt>Sequel::Model.db</tt>.
 
 === 自由な SQL クエリ
 
@@ -353,7 +361,7 @@ Sequel 使用時に注意すべきセキュリティ事項の詳細について�
 
 設定する値の選択にテーブルのカラムを参照できます:
 
-  posts.where{|o| o.stamp < Date.today - 7}.update(:backup_number => :backup_number + 1)
+  posts.where{|o| o.stamp < Date.today - 7}.update(:backup_number => Sequel.+(:backup_number, 1))
   # UPDATE posts SET backup_number = backup_number + 1 WHERE stamp < '2010-07-07'
 
 +delete+ と同様に +update+ はデータセットの全ての行に影響するため、まず +where+ そして +update+ を行なってください:
@@ -402,18 +410,6 @@ Sequel はテーブルを簡単に結合できます:
   # ON order_items.item_id = items.id
   # WHERE order_items.order_id = 1234
   
-=== データセットグラフ
-
-結合されたデータセットからレコードを取り出す時、ひとつのハッシュに結果を得られます。これは複数のテーブルに同じ名前のカラムがある場合は壊れてしまいます:
-
-  DB[:items].join(:order_items, :item_id => :id).first
-  => {:id=>order_items.id, :item_id=>order_items.item_id}
-
-+graph+ を使用すると、結果のハッシュを結合毎にサブハッシュに分割することができます:
-
-  DB[:items].graph(:order_items, :item_id => :id).first
-  => {:items=>{:id=>items.id}, :order_items=>{:id=>order_items.id, :item_id=>order_items.item_id}}
-
 == Sequel でのカラム参照
 
 Sequel はカラム名がシンボルで記述されることを期待します。さらに、戻り値のハッシュのキーは常にシンボルです。これは多くの場合、リテラル値とカラム参照を自由に混ぜられます。たとえば、次の2行は同等の SQL を提供します:
@@ -475,6 +471,10 @@ SQL の識別子はカラム、テーブル、スキーマの名前です。
   class Post < Sequel::Model
   end
 
+When a model class is created, it parses the schema in the table from the database, and
+automatically sets up accessor methods for all of the columns in the table (Sequel::Model
+implements the active record pattern).
+
 Sequel モデルクラスは、クラス名をアンダースコアした複数形がテーブル名であるとみなします:
 
   Post.table_name #=> :posts
@@ -519,9 +519,9 @@ Sequel モデルはプライマリキーとして任意のカラムを使用で�
   post = Post[:title => 'hello world']
   post = Post.first{num_comments < 10}
 
-=== レコードの繰り返し
+=== データセットのような動作
 
-モデルクラスは、多くのメソッドを下にあるデータセットにプロキシすることで、レコードのサブセットを繰り返すことができます。これは、モデルインスタンスを返すカスタマイズされたクエリを生成するために +Dataset+ API の多くを使用できることを意味します。例えば:
+モデルクラスは多くのメソッドを下位のデータセットに転送します。これはほとんどの +Dataset+ API を使用して、モデルインスタンスを返すカスタマイズされたクエリを生成できることを意味します。例えば:
 
   Post.where(:category => 'ruby').each{|post| p post}
 
@@ -546,21 +546,25 @@ Sequel モデルはプライマリキーとして任意のカラムを使用で�
   post[:id] #=> 123
   post[:title] #=> 'hello world'
 
-属性セッター(<tt>[]=</tt> メソッドまたは +set+ メソッド)を使用してレコードの値を変更することもできます:
+属性セッターまたは <tt>[]=</tt> メソッドを使用してレコードの値を変更することもできます:
+
 
   post.title = 'hey there'
-  # or 
   post[:title] = 'hey there'
-  # or 
-  post.set(:title=>'hey there')
 
 それはオブジェクトの値を変更するだけで、データベース内の行の更新は行いません。データベース行を更新するには、+save+ メソッドを呼び出します:
 
   post.save
 
-+update+ メソッドで、レコードの値の変更とオブジェクトの変更の保存を一つのメソッドで行うことができます:
+=== Mass assignment
 
-  post.update(:title => 'hey there')
+You can also set the values for multiple columns in a single method call, using one of the mass-assignment methods.  See the {mass assignment guide}[link:files/doc/mass_assignment_rdoc.html] for details.  For example +set+ updates the model's column values without saving:
+
+  post.set(:title=>'hey there', :updated_by=>'foo')
+
+and +update+ updates the model's column values and then saves the changes to the database:
+
+  post.update(:title => 'hey there', :updated_by=>'foo')
 
 === 新しいレコードの生成
 
@@ -610,12 +614,12 @@ Sequel モデルはプライマリキーとして任意のカラムを使用で�
   post.delete # => bypasses hooks
   post.destroy # => runs hooks
 
-レコードは <tt>Model.delete</tt> と <tt>Model.destroy</tt> を呼び出すことで大量に削除することもできます。上述したように削除されるレコード用にフィルタを記述することもできます:
+レコードはモデルのデータセットで <tt>delete</tt> と <tt>destroy</tt> を呼び出すことで大量に削除することもできます。上述したように削除されるレコード用にフィルタを記述することもできます:
 
   Post.where(:category => 32).delete # => bypasses hooks
   Post.where(:category => 32).destroy # => runs hooks
 
-<tt>Model.destroy</tt> が呼び出された場合は各レコードが別々に削除されることに注意してください。<tt>Model.delete</tt> はすべての適合したレコードを一つの SQL クエリで削除します。
+<tt>destroy</tt> が呼び出された場合は各レコードが別々に削除されることに注意してください。<tt>delete</tt> はすべての適合したレコードを一つの SQL クエリで削除します。
 
 === 関連(Associations)
 
@@ -727,19 +731,7 @@ proc を使用して eagerly ロードされたデータセットを動的にカ
 
 === データセットの下の拡張
 
-テーブル共通のロジックを追加する明らかな方法は、モデルクラス定義にクラスメソッドを定義することです。この方法はデータセット下のサブセットの定義、並び替えの変更、複数レコードのアクションの実行を可能にします:
-
-  class Post < Sequel::Model
-    def self.posts_with_few_comments
-      where{num_comments < 30}
-    end
-
-    def self.clean_posts_with_few_comments
-      posts_with_few_comments.delete
-    end
-  end
-
-+dataset_module+ を使用してデータセット上にメソッドを定義することで、テーブル共通のロジックを実装することもできます:
+テーブル共通のロジックを追加する推奨方法は、データセットで +dataset_module+ を使用してメソッドを定義することです:
 
   class Post < Sequel::Model
     dataset_module do
@@ -753,7 +745,7 @@ proc を使用して eagerly ロードされたデータセットを動的にカ
     end
   end
 
-これはテーブル共通の操作の実装方法としてお勧めします。フィルタされたデータセットからもあなたのモデル API にアクセスできます:
+これはフィルタされたデータセットからあなたのモデル API にアクセスすることができます:
 
   Post.where(:category => 'ruby').clean_posts_with_few_comments
 
@@ -777,4 +769,3 @@ Sequel モデルは +subset+ クラスメソッドも提供します。これは
       errors.add(:written_on, "should be in the past") if written_on >= Time.now
     end
   end
-

@@ -643,25 +643,6 @@ describe "A PostgreSQL database" do
     @db[:posts].order(:a).map(:a).should == [1, 2, 10, 20, 21]
   end
     
-  specify "should support resetting the primary key sequence with default_schema" do
-    begin
-      @db.run("DROP SCHEMA p") rescue nil
-      @db.run("CREATE SCHEMA p")
-      @db.default_schema = :p
-      @db.create_table(:posts){primary_key :a}
-      @db[:p__posts].insert(:a=>20).should == 20
-      @db[:p__posts].insert.should == 1
-      @db[:p__posts].insert.should == 2
-      @db[:p__posts].insert(:a=>10).should == 10
-      @db.reset_primary_key_sequence(:posts).should == 21
-      @db[:p__posts].insert.should == 21
-      @db[:p__posts].order(:a).map(:a).should == [1, 2, 10, 20, 21]
-    ensure
-      @db.default_schema = nil
-      @db.run("DROP SCHEMA p CASCADE")
-    end
-  end
-
   specify "should support specifying Integer/Bignum/Fixnum types in primary keys and have them be auto incrementing" do
     @db.create_table(:posts){primary_key :a, :type=>Integer}
     @db[:posts].insert.should == 1
@@ -957,15 +938,6 @@ describe "Postgres::Database schema qualified tables" do
     @db << "CREATE SEQUENCE schema_test.\"ks eq\""
     @db.create_table(:"schema_test__schema test"){integer :j; primary_key :k, :type=>:integer, :default=>Sequel.lit("nextval('schema_test.\"ks eq\"'::regclass)")}
     @db.primary_key_sequence(:"schema_test__schema test").should == '"schema_test"."ks eq"'
-  end
-
-  specify "#default_schema= should change the default schema used from public" do
-    @db.create_table(:schema_test__schema_test){primary_key :i}
-    @db.default_schema = :schema_test
-    @db.table_exists?(:schema_test).should == true
-    @db.tables.should == [:schema_test]
-    @db.primary_key(:schema_test__schema_test).should == 'i'
-    @db.primary_key_sequence(:schema_test__schema_test).should == '"schema_test"."schema_test_i_seq"'
   end
 
   specify "should handle schema introspection cases with tables with same name in multiple schemas" do
@@ -2103,8 +2075,8 @@ describe 'PostgreSQL hstore handling' do
     c.one_to_many :items, :class=>c, :key=>Sequel.cast(Sequel.hstore(:h)['item_id'], Integer), :key_method=>:item_id
     c.many_to_many :related_items, :class=>c, :join_table=>:items___i, :left_key=>Sequel.cast(Sequel.hstore(:h)['left_item_id'], Integer), :right_key=>Sequel.cast(Sequel.hstore(:h)['item_id'], Integer)
 
-    c.many_to_one :other_item, :class=>c, :key=>:id, :primary_key_method=>:item_id, :primary_key=>Sequel.cast(Sequel.hstore(:h)['item_id'], Integer)
-    c.one_to_many :other_items, :class=>c, :primary_key=>:item_id, :key=>:id, :primary_key_column=>Sequel.cast(Sequel.hstore(:h)['item_id'], Integer)
+    c.many_to_one :other_item, :class=>c, :key=>:id, :primary_key_method=>:item_id, :primary_key=>Sequel.cast(Sequel.hstore(:h)['item_id'], Integer), :reciprocal=>:other_items
+    c.one_to_many :other_items, :class=>c, :primary_key=>:item_id, :key=>:id, :primary_key_column=>Sequel.cast(Sequel.hstore(:h)['item_id'], Integer), :reciprocal=>:other_item
     c.many_to_many :other_related_items, :class=>c, :join_table=>:items___i, :left_key=>:id, :right_key=>:id,
       :left_primary_key_column=>Sequel.cast(Sequel.hstore(:h)['left_item_id'], Integer),
       :left_primary_key=>:left_item_id,
@@ -2180,18 +2152,18 @@ describe 'PostgreSQL hstore handling' do
     @ds.get(h1['a']).should == 'b'
     @ds.get(h1['d']).should == nil
 
-    @ds.get(h2.concat(h3).keys.pg_array.length).should == 2
-    @ds.get(h1.concat(h3).keys.pg_array.length).should == 3
-    @ds.get(h2.merge(h3).keys.pg_array.length).should == 2
-    @ds.get(h1.merge(h3).keys.pg_array.length).should == 3
+    @ds.get(h2.concat(h3).keys.length).should == 2
+    @ds.get(h1.concat(h3).keys.length).should == 3
+    @ds.get(h2.merge(h3).keys.length).should == 2
+    @ds.get(h1.merge(h3).keys.length).should == 3
 
     unless [:do].include?(@db.adapter_scheme)
       # Broken DataObjects thinks operators with ? represent placeholders
-      @ds.get(h1.contain_all(Sequel.pg_array(%w'a c'))).should == true
-      @ds.get(h1.contain_all(Sequel.pg_array(%w'a d'))).should == false
+      @ds.get(h1.contain_all(%w'a c')).should == true
+      @ds.get(h1.contain_all(%w'a d')).should == false
 
-      @ds.get(h1.contain_any(Sequel.pg_array(%w'a d'))).should == true
-      @ds.get(h1.contain_any(Sequel.pg_array(%w'e d'))).should == false
+      @ds.get(h1.contain_any(%w'a d')).should == true
+      @ds.get(h1.contain_any(%w'e d')).should == false
     end
 
     @ds.get(h1.contains(h2)).should == true
@@ -2205,7 +2177,7 @@ describe 'PostgreSQL hstore handling' do
     @ds.get(h1.defined('d')).should == false
 
     @ds.get(h1.delete('a')['c']).should == nil
-    @ds.get(h1.delete(Sequel.pg_array(%w'a d'))['c']).should == nil
+    @ds.get(h1.delete(%w'a d')['c']).should == nil
     @ds.get(h1.delete(h2)['c']).should == nil
 
     @ds.from(Sequel.hstore('a'=>'b', 'c'=>nil).op.each).order(:key).all.should == [{:key=>'a', :value=>'b'}, {:key=>'c', :value=>nil}]
@@ -2223,11 +2195,11 @@ describe 'PostgreSQL hstore handling' do
       @ds.get(h1.exist?('d')).should == false
     end
 
-    @ds.get(h1.hstore.hstore.hstore.keys.pg_array.length).should == 2
-    @ds.get(h1.keys.pg_array.length).should == 2
-    @ds.get(h2.keys.pg_array.length).should == 1
-    @ds.get(h1.akeys.pg_array.length).should == 2
-    @ds.get(h2.akeys.pg_array.length).should == 1
+    @ds.get(h1.hstore.hstore.hstore.keys.length).should == 2
+    @ds.get(h1.keys.length).should == 2
+    @ds.get(h2.keys.length).should == 1
+    @ds.get(h1.akeys.length).should == 2
+    @ds.get(h2.akeys.length).should == 1
 
     @ds.from(Sequel.hstore('t'=>'s').op.populate(Sequel::SQL::Cast.new(nil, :items))).select_map(:t).should == ['s']
     @ds.from(:items___i).select(Sequel.hstore('t'=>'s').op.record_set(:i).as(:r)).from_self(:alias=>:s).select(Sequel.lit('(r).*')).from_self.select_map(:t).should == ['s']
@@ -2235,22 +2207,22 @@ describe 'PostgreSQL hstore handling' do
     @ds.from(Sequel.hstore('t'=>'s', 'a'=>'b').op.skeys.as(:s)).select_order_map(:s).should == %w'a t'
     @ds.from((Sequel.hstore('t'=>'s', 'a'=>'b').op - 'a').skeys.as(:s)).select_order_map(:s).should == %w't'
 
-    @ds.get(h1.slice(Sequel.pg_array(%w'a c')).keys.pg_array.length).should == 2
-    @ds.get(h1.slice(Sequel.pg_array(%w'd c')).keys.pg_array.length).should == 1
-    @ds.get(h1.slice(Sequel.pg_array(%w'd e')).keys.pg_array.length).should == nil
+    @ds.get(h1.slice(%w'a c').keys.length).should == 2
+    @ds.get(h1.slice(%w'd c').keys.length).should == 1
+    @ds.get(h1.slice(%w'd e').keys.length).should == nil
 
     @ds.from(Sequel.hstore('t'=>'s', 'a'=>'b').op.svals.as(:s)).select_order_map(:s).should == %w'b s'
 
-    @ds.get(h1.to_array.pg_array.length).should == 4
-    @ds.get(h2.to_array.pg_array.length).should == 2
+    @ds.get(h1.to_array.length).should == 4
+    @ds.get(h2.to_array.length).should == 2
 
-    @ds.get(h1.to_matrix.pg_array.length).should == 2
-    @ds.get(h2.to_matrix.pg_array.length).should == 1
+    @ds.get(h1.to_matrix.length).should == 2
+    @ds.get(h2.to_matrix.length).should == 1
 
-    @ds.get(h1.values.pg_array.length).should == 2
-    @ds.get(h2.values.pg_array.length).should == 1
-    @ds.get(h1.avals.pg_array.length).should == 2
-    @ds.get(h2.avals.pg_array.length).should == 1
+    @ds.get(h1.values.length).should == 2
+    @ds.get(h2.values.length).should == 1
+    @ds.get(h1.avals.length).should == 2
+    @ds.get(h2.avals.length).should == 1
   end
 end if POSTGRES_DB.type_supported?(:hstore)
 

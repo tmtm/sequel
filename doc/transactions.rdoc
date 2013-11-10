@@ -31,7 +31,6 @@ Sequel では、データベーストランザクションを使用したい場�
 
 他の例外が raise した場合は、トランザクションはロールバックし、ブロックの外部にその例外が raise されます:
 
-  # ArgumentError raised
   DB.transaction do # BEGIN
     raise ArgumentError
   end # ROLLBACK
@@ -49,6 +48,7 @@ Sequel::Rollback 例外を再 raise したい場合は、<tt>:rollback => :rerai
   DB.transaction(:rollback => :always) do # BEGIN
     DB[:foo].insert(1) # INSERT
   end # ROLLBACK
+  # no exception raised
 
 現在トランザクション内にいるかどうかをチェックしたい場合は、Database#in_transaction? メソッドを使用します:
 
@@ -134,7 +134,7 @@ Sequel でプリペアドトランザクションを使用するには、:prepar
 == トランザクション分離レベル
 
 SQL 標準は４つの分離レベルをサポートします: READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE。
-すべてのデータベースが標準に記述されたレベルを実装しているわけではありませんが、PostgreSQL, MySQL, Microsoft SQL Server では、<tt>Database#transaction</tt> に :isolation オプションで使用したいトランザクション分離レベルを指定することができます。
+すべてのデータベースが標準に記述されたレベルを実装しているわけではありませんが、ほとんどのデータベースでは、<tt>Database#transaction</tt> に :isolation オプションで使用したいトランザクション分離レベルを指定することができます。
 分離レベルは :uncommitted, :committed, :repeatable, :serializable のいずれかで指定できます。
 このオプションを使用すると、Sequel はあなたのデータベース用の正しいトランザクション分離構文を使用します:
 

@@ -39,6 +39,7 @@ module Sequel
     # Executes the given SQL on the database. This method should be overridden in descendants.
     # This method should not be called directly by user code.
     def execute(sql, opts={})
+      Sequel::Deprecation.deprecate('Database#execute default implementation and Sequel::NotImplemented', 'All database instances can be assumed to implement execute')
       raise NotImplemented, "#execute should be overridden by adapters"
     end
     
@@ -78,6 +79,7 @@ module Sequel
     # :on_delete :: The action to take ON DELETE
     # :on_update :: The action to take ON UPDATE
     def foreign_key_list(table, opts={})
+      Sequel::Deprecation.deprecate('Database#foreign_key_list default implementation and Sequel::NotImplemented', 'Use Database#supports_foreign_key_parsing? to check for support')
       raise NotImplemented, "#foreign_key_list should be overridden by adapters"
     end
     
@@ -87,7 +89,7 @@ module Sequel
     #   # => 1
     #   DB.get{server_version{}} # SELECT server_version()
     def get(*args, &block)
-      dataset.get(*args, &block)
+      @default_dataset.get(*args, &block)
     end
     
     # Return a hash containing index information for the table. Hash keys are index name symbols.
@@ -100,6 +102,7 @@ module Sequel
     #   DB.indexes(:artists)
     #   # => {:artists_name_ukey=>{:columns=>[:name], :unique=>true}}
     def indexes(table, opts={})
+      Sequel::Deprecation.deprecate('Database#indexes default implementation and Sequel::NotImplemented', 'Use Database#supports_index_parsing? to check for support')
       raise NotImplemented, "#indexes should be overridden by adapters"
     end
     
@@ -219,6 +222,7 @@ module Sequel
     #
     #   DB.tables # => [:albums, :artists]
     def tables(opts={})
+      Sequel::Deprecation.deprecate('Database#tables default implementation and Sequel::NotImplemented', 'Use Database#supports_table_listing? to check for support')
       raise NotImplemented, "#tables should be overridden by adapters"
     end
     
@@ -226,6 +230,7 @@ module Sequel
     #
     #   DB.views # => [:gold_albums, :artists_with_many_albums]
     def views(opts={})
+      Sequel::Deprecation.deprecate('Database#views default implementation and Sequel::NotImplemented', 'Use Database#supports_view_listing? to check for support')
       raise NotImplemented, "#views should be overridden by adapters"
     end
     
@@ -234,7 +239,7 @@ module Sequel
     # Should raise an error if the table doesn't not exist,
     # and not raise an error if the table does exist.
     def _table_exists?(ds)
-      ds.get(Sequel::NULL)
+      ds.get(SQL::AliasedExpression.new(Sequel::NULL, :nil))
     end
     
     # Whether the type should be treated as a string type when parsing the
@@ -312,11 +317,12 @@ module Sequel
     # for this database.  Used when parsing metadata so that column symbols are
     # returned as expected.
     def metadata_dataset
-      return @metadata_dataset if defined?(@metadata_dataset) && @metadata_dataset
-      ds = dataset
-      ds.identifier_input_method = identifier_input_method_default
-      ds.identifier_output_method = identifier_output_method_default
-      @metadata_dataset = ds
+      @metadata_dataset ||= (
+        ds = dataset;
+        ds.identifier_input_method = identifier_input_method_default;
+        ds.identifier_output_method = identifier_output_method_default;
+        ds
+      )
     end
 
     # Return a Method object for the dataset's output_identifier_method.

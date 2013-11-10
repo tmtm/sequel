@@ -2,7 +2,6 @@
 
 == データベースのオープン
 
-  require 'rubygems'
   require 'sequel'
 
   DB = Sequel.sqlite('my_blog.db')
@@ -62,7 +61,7 @@
   dataset.map(:name) # 上と同じ
 
   dataset.inject(0){|sum, r| sum + r[:value]}
-  dataset.sum(:value) # 上と同じ
+  dataset.sum(:value) # より良い
 
 == フィルタリング ({Dataset Filtering}[link:files/doc/dataset_filtering_rdoc.html] も参照)
 
@@ -101,7 +100,7 @@
   DB[:items].where{(x > 5) & (y > 10)}.sql 
   # SELECT * FROM items WHERE ((x > 5) AND (y > 10))
 
-  DB[:items].where({:x => 1, :y => 2}.sql_or & Sequel.~(:z => 3)).sql 
+  DB[:items].where(Sequel.or(:x => 1, :y => 2)) & Sequel.~(:z => 3)).sql 
   # SELECT * FROM items WHERE (((x = 1) OR (y = 2)) AND (z != 3))
 
 === 数学演算子
@@ -126,10 +125,13 @@
 == 結合
 
   DB[:items].left_outer_join(:categories, :id => :category_id).sql 
-  # SELECT * FROM items LEFT OUTER JOIN categories ON categories.id = items.category_id
+  # SELECT * FROM items
+  # LEFT OUTER JOIN categories ON categories.id = items.category_id
 
   DB[:items].join(:categories, :id => :category_id).join(:groups, :id => :items__group_id) 
-  # SELECT * FROM items INNER JOIN categories ON categories.id = items.category_id INNER JOIN groups ON groups.id = items.group_id
+  # SELECT * FROM items
+  # INNER JOIN categories ON categories.id = items.category_id
+  # INNER JOIN groups ON groups.id = items.group_id
 	
 == 集約関数メソッド
 
@@ -140,7 +142,7 @@
   dataset.sum(:stock)
 
   dataset.group_and_count(:category)
-  dataset.group(:category).select(:category, Sequel.function(:AVG, :price))
+  dataset.select_group(:category).select_append{avg(:price)}
 
 == SQL 関数 / リテラル
 

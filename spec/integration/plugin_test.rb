@@ -493,38 +493,6 @@ describe "Tactical Eager Loading Plugin" do
   end
 end
 
-describe "Identity Map plugin" do 
-  before do
-    @db = INTEGRATION_DB
-    @db.create_table!(:items) do
-      primary_key :id
-      String :name
-      Integer :num
-    end
-    class ::Item < Sequel::Model(@db)
-      plugin :identity_map
-    end
-    Item.create(:name=>'J', :num=>3)
-  end
-  after do
-    @db.drop_table?(:items)
-    Object.send(:remove_const, :Item)
-  end
-
-  specify "should return the same instance if retrieved more than once" do
-    Item.with_identity_map{Item.first.object_id.should == Item.first.object_id}
-  end
-  
-  specify "should merge attributes that don't exist in the model" do
-    Item.with_identity_map do 
-      i = Item.select(:id, :name).first
-      i.values.should == {:id=>1, :name=>'J'}
-      Item.first
-      i.values.should == {:id=>1, :name=>'J', :num=>3}
-    end
-  end
-end
-
 describe "Touch plugin" do
   before(:all) do
     @db = INTEGRATION_DB
@@ -1060,7 +1028,7 @@ describe "UpdatePrimaryKey plugin" do
     @db[:t].all.should == [{:a=>1, :b=>4}]
     @c.first.set(:b=>5).save
     @db[:t].all.should == [{:a=>1, :b=>5}]
-    @c.first.set(:b=>6).save(:b)
+    @c.first.set(:b=>6).save(:columns=>:b)
     @db[:t].all.should == [{:a=>1, :b=>6}]
   end
 
@@ -1072,7 +1040,7 @@ describe "UpdatePrimaryKey plugin" do
   specify "should handle updating just the primary key field when saving changes" do
     @c.first.update(:a=>2)
     @db[:t].all.should == [{:a=>2, :b=>3}]
-    @c.first.set(:a=>3).save(:a)
+    @c.first.set(:a=>3).save(:columns=>:a)
     @db[:t].all.should == [{:a=>3, :b=>3}]
   end
 
@@ -1430,7 +1398,7 @@ describe "List plugin without a scope" do
     @c.plugin :list
   end
   before do
-    @c.delete
+    @c.dataset.delete
     @c.create :name => "abc"
     @c.create :name => "def"
     @c.create :name => "hig"
@@ -1505,7 +1473,7 @@ describe "List plugin with a scope" do
     @c.plugin :list, :field => :pos, :scope => :parent_id
   end
   before do
-    @c.delete
+    @c.dataset.delete
     p1 = @c.create :name => "Hm", :parent_id => 0
     p2 = @c.create :name => "Ps", :parent_id => p1.id
     @c.create :name => "P1", :parent_id => p2.id
@@ -1746,7 +1714,7 @@ describe "Sequel::Plugins::PreparedStatements" do
     @c.plugin :prepared_statements_with_pk
   end
   before do
-    @c.delete
+    @c.dataset.delete
     @foo = @c.create(:name=>'foo', :i=>10)
     @bar = @c.create(:name=>'bar', :i=>20)
   end
@@ -1942,13 +1910,13 @@ describe "Sequel::Plugins::ConstraintValidations" do
     it "should set up automatic validations inside the model" do 
       c = Class.new(Sequel::Model(@ds))
       c.plugin :constraint_validations
-      c.delete
+      c.dataset.delete
       proc{c.create(@valid_row)}.should_not raise_error
 
       # Test for unique validation 
       c.new(@valid_row).should_not be_valid
 
-      c.delete
+      c.dataset.delete
       @violations.each do |col, vals|
         try = @valid_row.dup
         vals.each do |val|

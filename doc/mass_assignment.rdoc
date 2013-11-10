@@ -36,7 +36,7 @@ Sequel は一括割り当てを安全にする複数の方法を持っていま�
   # インスタンスレベル
   post.strict_param_setting = false
 
-一括割り当てメソッドは長時間かかりますが、Sequel 3.12.0 からは、+set_fields+ と +update_fields+ メソッドが追加されました。これらは多くのユーザーにとってより良い一括割り当ての選択です。
++set_only+ と +update_only+ に加え、Sequel は +set_fields+ と +update_fields+ メソッドも持ちます。これらは多くのユーザーにとってより良い一括割り当ての選択です。
 これらのメソッドは二つの引数を取ります。最初の引数は属性ハッシュで、2番目の引数は正当なフィールド名の配列です:
 
   post.set_fields(params[:post], [:title, :body])
@@ -49,6 +49,11 @@ Sequel は一括割り当てを安全にする複数の方法を持っていま�
 +set_only+ と +update_only+ は、どのフィールドが入力で提供されるか定かではないが、いくつかのセッターメソッドだけが呼び出せる場合のためにデザインされています。
 これは柔軟な API に対してうまく働きます。
 
-Sequel 3.34.0 から、+set_fields+ と +update_fields+ はオプション引数ハッシュを取り、現在は :missing オプションを処理します。<tt>:missing=>:skip</tt> つきの +set_fields+ と +update_fields+ は、ハッシュ中の欠けているエントリをスキップします。柔軟な API で使用できるようにします。<tt>:missing=>:raise</tt> つきの +set_fields+ と +update_fields+ は、ハッシュ内のエントリがひとつでも欠けていると、 nil やハッシュのデフォルト値を割り当てる代わりに、エラーを raise します。これは、デフォルト一括割り当てメソッドの :strict_param_checking 設定のように、厳密なチェックを行います。
++set_fields+ and +update_fields+ are designed for the case where you are expecting specific fields in the input, and want to ignore the other fields.
+They work great for things like HTML forms where the form fields are static.
++set_only+ and +update_only+ are designed for cases where you are not sure what fields are going to be present in the input, but still want to make sure only certain setter methods can be called.
+They work great for flexible APIs.
+
++set_fields+ と +update_fields+ はオプション引数ハッシュを取り、現在は :missing オプションを処理します。<tt>:missing=>:skip</tt> つきの +set_fields+ と +update_fields+ は、ハッシュ中の欠けているエントリをスキップします。柔軟な API で使用できるようにします。<tt>:missing=>:raise</tt> つきの +set_fields+ と +update_fields+ は、ハッシュ内のエントリがひとつでも欠けていると、 nil やハッシュのデフォルト値を割り当てる代わりに、エラーを raise します。これは、デフォルト一括割り当てメソッドの :strict_param_checking 設定のように、厳密なチェックを行います。 You can use the <tt>Model.default_set_fields_options=</tt> method to set the default options to use for +set_fields+ and +update_fields+ on a global or per-model basis.
 
 すべての一括割り当てでは、+set+ で始まるメソッドはオブジェクトを保存せずに属性を設定します。+update+ で始まるメソッドは属性を設定し、オブジェクトへの変更を保存します。

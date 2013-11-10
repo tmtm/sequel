@@ -4,6 +4,8 @@ module Sequel
   Dataset::NON_SQL_OPTIONS << :disable_insert_output
   module MSSQL
     module DatabaseMethods
+      extend Sequel::Database::ResetIdentifierMangling
+
       AUTO_INCREMENT = 'IDENTITY(1,1)'.freeze
       SERVER_VERSION_RE = /^(\d+)\.(\d+)\.(\d+)/.freeze
       SERVER_VERSION_SQL = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS varchar)".freeze
@@ -21,7 +23,12 @@ module Sequel
       # strings.  True by default for compatibility, can be set to false for a possible
       # performance increase.  This sets the default for all datasets created from this
       # Database object.
-      attr_accessor :mssql_unicode_strings
+      attr_reader :mssql_unicode_strings
+
+      def mssql_unicode_strings=(v)
+        @mssql_unicode_strings = v
+        reset_default_dataset
+      end
 
       # The types to check for 0 scale to transform :decimal types
       # to :integer.
@@ -281,7 +288,7 @@ module Sequel
         m = output_identifier_meth
         metadata_dataset.from(:information_schema__tables___t).
           select(:table_name).
-          filter(:table_type=>type, :table_schema=>(opts[:schema]||default_schema||'dbo').to_s).
+          filter(:table_type=>type, :table_schema=>(opts[:schema]||_default_schema||'dbo').to_s).
           map{|x| m.call(x[:table_name])}
       end
 
@@ -343,7 +350,7 @@ module Sequel
               :table_schema => :table_schema, :table_name => :table_name).
          select(:column_name___column, :data_type___db_type, :character_maximum_length___max_chars, :column_default___default, :is_nullable___allow_null, :numeric_precision___column_size, :numeric_scale___scale).
          filter(:c__table_name=>tn)
-        if schema = opts[:schema] || default_schema
+        if schema = opts[:schema] || _default_schema
           ds.filter!(:c__table_schema=>schema)
         end
         ds.map do |row|
@@ -441,12 +448,11 @@ module Sequel
       Sequel::Dataset.def_mutation_method(:disable_insert_output, :output, :module=>self)
 
       # Allow overriding of the mssql_unicode_strings option at the dataset level.
-      attr_accessor :mssql_unicode_strings
+      attr_writer :mssql_unicode_strings
 
-      # Copy the mssql_unicode_strings option from the +db+ object.
-      def initialize(db, opts={})
-        super
-        @mssql_unicode_strings = db.mssql_unicode_strings
+      # Use the database's mssql_unicode_strings setting if the dataset hasn't overridden it.
+      def mssql_unicode_strings
+        defined?(@mssql_unicode_strings) ? @mssql_unicode_strings : (@mssql_unicode_strings = db.mssql_unicode_strings)
       end
 
       # MSSQL uses + for string concatenation, and LIKE is case insensitive by default.

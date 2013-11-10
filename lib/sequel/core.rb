@@ -28,15 +28,10 @@ module Sequel
   @convert_two_digit_years = true
   @datetime_class = Time
   @empty_array_handle_nulls = true
-  @virtual_row_instance_eval = true
-  @require_thread = nil
-  
-  # Mutex used to protect file loading/requireing
-  @require_mutex = Mutex.new
-  
+
   # Whether Sequel is being run in single threaded mode
   @single_threaded = false
-  
+
   class << self
     # Sequel converts two digit years in <tt>Date</tt>s and <tt>DateTime</tt>s by default,
     # so 01/02/03 is interpreted at January 2nd, 2003, and 12/13/99 is interpreted
@@ -79,29 +74,30 @@ module Sequel
     # 
     # This may not handle NULLs correctly, but can be much faster on
     # some databases.
-    attr_accessor :empty_array_handle_nulls
+    attr_reader :empty_array_handle_nulls
 
-    # For backwards compatibility, has no effect.
-    attr_accessor :virtual_row_instance_eval
-    
-    # Alias to the standard version of require
-    alias k_require require
+    def empty_array_handle_nulls=(v)
+      Sequel::Deprecation.deprecate('Sequel.empty_array_handle_nulls=', 'Please switch to loading the empty_array_ignore_nulls plugin if you wish empty array handling to ignore nulls')
+      @empty_array_handle_nulls = v
+    end
+
+    # REMOVE40
+    def virtual_row_instance_eval
+      Sequel::Deprecation.deprecate('Sequel.virtual_row_instance_eval', 'It has no effect, so you can safely stop calling it.')
+    end
+    def virtual_row_instance_eval=(v)
+      Sequel::Deprecation.deprecate('Sequel.virtual_row_instance_eval=', 'It has no effect, so you can safely stop calling it.')
+    end
+    def k_require(*a)
+      Sequel::Deprecation.deprecate('Sequel.k_require', 'Please switch to Kernel.require')
+      Kernel.require(*a)
+    end
 
     private
 
     # Make thread safe requiring reentrant to prevent deadlocks.
     def check_requiring_thread
-      return yield if @single_threaded
-      t = Thread.current
-      return(yield) if @require_thread == t
-      @require_mutex.synchronize do
-        begin
-          @require_thread = t 
-          yield
-        ensure
-          @require_thread = nil
-        end
-      end
+      Sequel::Deprecation.deprecate('Sequel.check_requiring_thread', 'It has no effect, so you can safely stop calling it.')
     end
   end
 
@@ -119,7 +115,7 @@ module Sequel
     when Hash
       true
     when Array
-      !obj.empty? && !obj.is_a?(SQL::ValueList) && obj.all?{|i| (Array === i) && (i.length == 2)}
+      !obj.empty? && !obj.is_a?(SQL::ValueList) && obj.all?{|i| i.is_a?(Array) && (i.length == 2)}
     else
       false
     end
@@ -152,7 +148,7 @@ module Sequel
   def self.core_extensions?
     false
   end
-  
+
   # Convert the +exception+ to the given class.  The given class should be
   # <tt>Sequel::Error</tt> or a subclass.  Returns an instance of +klass+ with
   # the message and backtrace of +exception+.
@@ -175,7 +171,7 @@ module Sequel
   #   Sequel.extension(:schema_dumper)
   #   Sequel.extension(:pagination, :query)
   def self.extension(*extensions)
-    extensions.each{|e| tsk_require "sequel/extensions/#{e}"}
+    extensions.each{|e| Kernel.require "sequel/extensions/#{e}"}
   end
   
   # Set the method to call on identifiers going into the database.  This affects
@@ -192,7 +188,7 @@ module Sequel
   def self.identifier_input_method=(value)
     Database.identifier_input_method = value
   end
-  
+
   # Set the method to call on identifiers coming out of the database.  This affects
   # the literalization of identifiers by calling this method on them when they are
   # retrieved from the database.  Sequel downcases identifiers retrieved for most
@@ -209,12 +205,24 @@ module Sequel
     Database.identifier_output_method = value
   end
 
+  # The exception classed raised if there is an error parsing JSON.
+  # This can be overridden to use an alternative json implementation.
+  def self.json_parser_error_class
+    JSON::ParserError
+  end
+
+  # Convert given object to json and return the result.
+  # This can be overridden to use an alternative json implementation.
+  def self.object_to_json(obj, *args)
+    obj.to_json(*args)
+  end
+
   # Parse the string as JSON and return the result.
-  # This is solely for internal use, it should not be used externally.
-  def self.parse_json(json) # :nodoc:
+  # This can be overridden to use an alternative json implementation.
+  def self.parse_json(json)
     JSON.parse(json, :create_additions=>false)
   end
-  
+
   # Set whether to quote identifiers for all databases by default. By default,
   # Sequel quotes identifiers in all SQL strings, so to turn that off:
   #
@@ -235,7 +243,7 @@ module Sequel
       end
     end
   end
-  
+
   # Require all given +files+ which should be in the same or a subdirectory of
   # this file.  If a +subdir+ is given, assume all +files+ are in that subdir.
   # This is used to ensure that the files loaded are from the same version of
@@ -243,7 +251,7 @@ module Sequel
   def self.require(files, subdir=nil)
     Array(files).each{|f| super("#{File.dirname(__FILE__).untaint}/#{"#{subdir}/" if subdir}#{f}")}
   end
-  
+
   # Set whether Sequel is being used in single threaded mode. By default,
   # Sequel uses a thread-safe connection pool, which isn't as fast as the
   # single threaded connection pool, and also has some additional thread
@@ -377,14 +385,14 @@ module Sequel
     end
   end
 
-  # Same as Sequel.require, but wrapped in a mutex in order to be thread safe.
+  # REMOVE40
   def self.ts_require(*args)
-    check_requiring_thread{require(*args)}
+    Sequel::Deprecation.deprecate('Sequel.ts_require', 'Please switch to Sequel.require')
+    require(*args)
   end
-  
-  # Same as Kernel.require, but wrapped in a mutex in order to be thread safe.
   def self.tsk_require(*args)
-    check_requiring_thread{k_require(*args)}
+    Sequel::Deprecation.deprecate('Sequel.tsk_require', 'Please switch to Kernel.require')
+    Kernel.require(*args)
   end
 
   # If the supplied block takes a single argument,
@@ -403,21 +411,20 @@ module Sequel
       block.call(vr)
     end  
   end
-  
+
   ### Private Class Methods ###
 
   # Helper method that the database adapter class methods that are added to Sequel via
   # metaprogramming use to parse arguments.
-  def self.adapter_method(adapter, *args, &block) # :nodoc:
-    raise(::Sequel::Error, "Wrong number of arguments, 0-2 arguments valid") if args.length > 2
-    opts = {:adapter=>adapter.to_sym}
-    opts[:database] = args.shift if args.length >= 1 && !(args[0].is_a?(Hash))
-    if Hash === (arg = args[0])
-      opts.merge!(arg)
-    elsif !arg.nil?
+  def self.adapter_method(adapter, *args, &block)
+    options = args.last.is_a?(Hash) ? args.pop : {}
+    opts = {:adapter => adapter.to_sym}
+    opts[:database] = args.shift if args.first.is_a?(String)
+    if args.any?
       raise ::Sequel::Error, "Wrong format of arguments, either use (), (String), (Hash), or (String, Hash)"
     end
-    connect(opts, &block)
+
+    connect(opts.merge(options), &block)
   end
 
   # Method that adds a database adapter class method to Sequel that calls
@@ -432,11 +439,11 @@ module Sequel
   end
 
   private_class_method :adapter_method, :def_adapter_method
-  
-  require(%w"sql connection_pool exceptions dataset database timezones ast_transformer version")
+
+  require(%w"deprecated sql connection_pool exceptions dataset database timezones ast_transformer version")
   if !defined?(::SEQUEL_NO_CORE_EXTENSIONS) && !ENV.has_key?('SEQUEL_NO_CORE_EXTENSIONS')
   # :nocov:
-    extension(:core_extensions)
+    require(:deprecated_core_extensions)
   # :nocov:
   end
 

@@ -646,7 +646,7 @@ module Sequel
     # for certain databases.
     def default_index_name(table_name, columns)
       schema, table = schema_and_table(table_name)
-      "#{"#{schema}_" if schema and schema != default_schema}#{table}_#{columns.map{|c| [String, Symbol].any?{|cl| c.is_a?(cl)} ? c : literal(c).gsub(/\W/, '_')}.join(UNDERSCORE)}_index"
+      "#{"#{schema}_" if schema and schema != _default_schema}#{table}_#{columns.map{|c| [String, Symbol].any?{|cl| c.is_a?(cl)} ? c : literal(c).gsub(/\W/, '_')}.join(UNDERSCORE)}_index"
     end
   
     # Get foreign key name for given table and columns.
@@ -752,12 +752,12 @@ module Sequel
       "ALTER TABLE #{quote_schema_table(name)} RENAME TO #{quote_schema_table(new_name)}"
     end
 
-    # Remove the cached schema_utility_dataset, because the identifier
-    # quoting has changed.
+    # REMOVE40
     def reset_schema_utility_dataset
-      @schema_utility_dataset = nil
+      Sequel::Deprecation.deprecate('Database#reset_schema_utility_dataset', 'Switch to Database#reset_default_dataset')
+      reset_default_dataset
     end
-    
+
     # Split the schema information from the table
     def schema_and_table(table_name)
       schema_utility_dataset.schema_and_table(table_name)
@@ -770,7 +770,7 @@ module Sequel
 
     # The dataset to use for proxying certain schema methods.
     def schema_utility_dataset
-      @schema_utility_dataset ||= dataset
+      @default_dataset
     end
 
     # Split the schema information from the table

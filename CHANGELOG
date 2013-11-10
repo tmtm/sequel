@@ -1,3 +1,233 @@
+=== 3.48.0 (2013-06-01)
+
+* Make named_timezones extension usable by databases allowing timezone strings to be given to Database#timezone= (jeremyevans)
+
+* Make Dataset#or just clone if given an empty argument (jeremyevans)
+
+* Deprecated using a mismatched number of placeholders and arguments in a placeholder literal string (jeremyevans)
+
+* Add Dataset#qualify_to and #qualify_to_first_source to sequel_3_dataset_methods extension (jeremyevans)
+
+* Add scissors plugin for Model.update, .delete, and .destroy (jeremyevans)
+
+* Validate against explicit nil values in NOT NULL columns with default values in the auto_validations plugin (jeremyevans)
+
+* Support :not_null=>:presence option for auto_validations plugin, for using presence validation for not null columns (jeremyevans)
+
+* Rename auto_validate_presence_columns to auto_validate_not_null_columns (jeremyevans)
+
+* Make pg_hstore_ops extension integrate with pg_array, pg_hstore, and pg_array_ops extensions (jeremyevans)
+
+* Add Sequel.json_parser_error_class and Sequel.object_to_json to allow the use of alternative JSON implementations (jeremyevans) (#662)
+
+* Deprecate JSON.create_id usage in the json_serializer plugin (jeremyevans)
+
+* Emulate offsets on Microsoft Access using reverse orders and total counts (jeremyevans) (#661)
+
+* Make ado adapter handle disconnecting an already disconnected connection (jeremyevans)
+
+* Deprecate parsing columns for the same table name in multiple schemas on jdbc (jeremyevans)
+
+* Allow association_proxies plugin to accept a block to give user control over which methods are proxied to the dataset (jeremyevans) (#660)
+
+* Deprecate calling Dataset#add_graph_aliases before #graph or #set_graph_aliases (jeremyevans)
+
+* Deprecate Model.add_graph_aliases, .insert_multiple, .query, .set_overrides, .set_defaults, .to_csv, and .paginate (jeremyevans)
+
+* Add guide for ordering code with Sequel (jeremyevans)
+
+* Deprecate Database#transaction :disconnect=>:retry option (jeremyevans)
+
+* Deprecate Model.set, .update, .delete, and .destroy (jeremyevans)
+
+* Deprecate Dataset#set (jeremyevans)
+
+* Add specs for bin/sequel (jeremyevans)
+
+* Make constraint_validations plugin reflect validations by column (jeremyevans)
+
+* Allow for per-model/per-validation type customization of validation options in constraint_validations plugin (jeremyevans)
+
+* Make Database#constraint_validations in the constraint_validations plugin have raw row values (jeremyevans)
+
+* Fix statement freeing in the ibmdb adapter (jeremyevans)
+
+* Make single and class table inheritance plugins handle usage of set_dataset in a subclass (jeremyevans)
+
+* Allow validates_schema_types in validation_helpers plugin accept an options hash (jeremyevans)
+
+* Deprecate Model.set_primary_key taking multiple arguments (jeremyevans)
+
+* Make auto_validations plugin work with databases that don't support index parsing (jeremyevans)
+
+* Model classes will no longer call Database#schema if it isn't supported (jeremyevans)
+
+* Speed up Model.with_pk and with_pk! class methods (jeremyevans)
+
+* Speed up Dataset#clone when called without an argument (jeremyevans)
+
+* Deprecate Postgres::PGRangeOp#{starts_before,ends_after} (jeremyevans)
+
+* Deprecate global use of null_dataset, pagination, pretty_table, query, select_remove, schema_caching, schema_dumper, and to_dot extensions (jeremyevans)
+
+* Deprecate Dataset.introspect_all_columns in the columns_introspection extension (jeremyevans)
+
+* Add empty_array_ignore_nulls extension for ignoring null handling for IN/NOT with an empty array (jeremyevans)
+
+* Deprecate Sequel.empty_array_handle_nulls accessor (jeremyevans)
+
+* Deprecate Sequel.{k,ts,tsk}_require and Sequel.check_requiring_thread (jeremyevans)
+
+* Discontinue use of manual thread-safe requiring (jeremyevans)
+
+* Deprecate using an unsupported client_min_messages setting on PostgreSQL (jeremyevans)
+
+* Deprecate passing non-hash 4th argument to Dataset#join_table (jeremyevans)
+
+* Deprecate passing non-hash 2nd argument to Dataset#union/intersect/except (jeremyevans)
+
+* Deprecate one_to_many with :one_to_one option raising an error (jeremyevans)
+
+* Automatically typecast hash and array to string for string columns in the looser_typecasting extension (jeremyevans)
+
+* Deprecate automatic typecasting of hash and array to string for string columns (jeremyevans)
+
+* Deprecate :eager_loader and :eager_grapher association options getting passed 3 separate arguments (jeremyevans)
+
+* Deprecate validates_not_string (jeremyevans)
+
+* Deprecate casting via __type suffix for prepared type placeholders in the postgres adapter (jeremyevans)
+
+* Deprecate json_serializer's Model.json_create (jeremyevans)
+
+* Deprecate json_serializer from_json and xml_serializer from_xml :all_columns and :all_associations options (jeremyevans)
+
+* Deprecate passing an unsupported lock mode to Dataset#lock on PostgreSQL (jeremyevans)
+
+* Deprecate Model::InstanceMethods.class_attr_{overridable,reader} (jeremyevans)
+
+* Deprecate all methods in Dataset::PUBLIC_APPEND_METHODS except for literal, quote_identifier, quote_schema_table (jeremyevans)
+
+* Deprecate all methods in Dataset::PRIVATE_APPEND_METHODS (jeremyevans)
+
+* Deprecate Dataset.def_append_methods (jeremyevans)
+
+* Deprecate Dataset#table_ref_append (jeremyevans)
+
+* Deprecate SQL::Expression#to_s taking an argument and returning a literal SQL string (jeremyevans)
+
+* Deprecate creating Model class methods automatically from plugin public dataset methods (jeremyevans)
+
+* Add Sequel.cache_anonymous_models accessor (jeremyevans)
+
+* Deprecate Sequel::Model.cache_anonymous_models accessor (jeremyevans)
+
+* Deprecate identity_map plugin (jeremyevans)
+
+* Deprecate Model#set_values (jeremyevans)
+
+* Deprecate pg_auto_parameterize and pg_statement_cache extensions (jeremyevans)
+
+* Deprecate Model#pk_or_nil (jeremyevans)
+
+* Deprecate Model.print and Model.each_page (jeremyevans)
+
+* Deprecate Dataset checking that the Database implements the identifier mangling methods (jeremyevans)
+
+* Deprecate Database#reset_schema_utility_dataset private method (jeremyevans)
+
+* Speed up Database#fetch, #from, #select, and #get by using a cached dataset (jeremyevans)
+
+* Make sure adapters with subadapters have fully initialized database instances before calling Database.after_initialize (jeremyevans)
+
+* Set identifier mangling methods on Database initialization (jeremyevans)
+
+* Switch internal use of class variables to instance variables (jeremyevans)
+
+* Deprecate passing an options hash to Database#dataset or Dataset.new (jeremyevans)
+
+* Speed up Dataset#clone (jeremyevans)
+
+* Add sequel_3_dataset_methods extension for Dataset#[]=, #insert_multiple, #set, #to_csv, #db=, and #opts= (jeremyevans)
+
+* Deprecate Dataset#[]=, #insert_multiple, #to_csv, #db=, and #opts= (jeremyevans)
+
+* Add blacklist_security plugin for Model.restricted_columns, Model.set_restricted_columns, Model#set_except, and Model#update_except (jeremyevans)
+
+* Deprecate Model.restricted_columns, Model.set_restricted_columns, Model#set_except, and Model#update_except (jeremyevans)
+
+* Deprecate Database#default_schema (jeremyevans)
+
+* Deprecate Sequel::NotImplemented and defining methods that raise it (jeremyevans)
+
+* Add Database#supports_{index_parsing,foreign_key_parsing,table_listing,view_listing}? (jeremyevans)
+
+* Deprecate Sequel.virtual_row_instance_eval accessor (jeremyevans)
+
+* Deprecate sequel_core.rb and sequel_model.rb (jeremyevans)
+
+* Add graph_each extension for Dataset#graph_each (jeremyevans)
+
+* Deprecate Dataset#graph_each (jeremyevans)
+
+* Add set_overrides extension for Dataset#set_overrides and #set_defaults (jeremyevans)
+
+* Deprecate Dataset#set_overrides and #set_defaults (jeremyevans)
+
+* Deprecate Database#query in the informix adapter (jeremyevans)
+
+* Deprecate Database#do as an alias to execute/execute_dui in some adapters (jeremyevans)
+
+* Deprecate modifying initial Dataset hash if the hash wasn't provided as an argument (jeremyevans)
+
+* Make active_model plugin use an errors class with autovivification (jeremyevans)
+
+* Deprecate Model::Errors#[] autovivification (returning empty array when missing) (jeremyevans)
+
+* Add Model#errors_class private method for choosing the errors class on a per-model basis (jeremyevans)
+
+* Add after_initialize plugin for the after_initialize hook (jeremyevans)
+
+* Deprecate Model after_initialize hook (jeremyevans)
+
+* Deprecate passing two arguments to Model.new (jeremyevans)
+
+* Deprecate choosing reciprocal associations with conditions, blocks, or differing primary keys (jeremyevans)
+
+* Deprecate choosing first from ambiguous reciprocal associations (jeremyevans)
+
+* Deprecate validates_type allowing nil values by default (jeremyevans)
+
+* Deprecate the correlated_subquery eager limit strategy (jeremyevans)
+
+* Add hash_aliases extension for making Dataset#select and #from treat hashes as alias specifiers (jeremyevans)
+
+* Deprecate having Dataset#select and #from treat hashes as alias specifiers (jeremyevans)
+
+* Do not automatically convert virtual row block return values to arrays by some Dataset methods (jeremyevans)
+
+* Add filter_having extension for making Dataset#{and,filter,exclude,or} affect the HAVING clause if present (jeremyevans)
+
+* Deprecate Dataset#select_more meaning Dataset#select when called without an existing selection (jeremyevans)
+
+* Deprecate Dataset#and, #or, and #invert raising exceptions for no existing filter (jeremyevans)
+
+* Deprecate Dataset#{and,filter,exclude,or} affecting the HAVING clause (jeremyevans)
+
+* Deprecate passing explicit columns to update as separate arguments to Model#save (jeremyevans)
+
+* Allow specifying explicit columns to update in Model#save via the :columns option (jeremyevans)
+
+* Add ability set the default for join_table's :qualify option via Dataset#default_join_table_qualification (jeremyevans)
+
+* Deprecated :root=>true meaning :root=>:both in the json_serializer (jeremyevans)
+
+* Deprecate core extension usage if the core_extensions have not been explicitly loaded (jeremyevans)
+
+* Deprecate Symbol#{[],<,<=,>,>=} methods when using the core_extensions (jeremyevans)
+
+* Add ruby18_symbol_extensions extension for the Symbol#{[],<,<=,>,>=} methods (jeremyevans)
+
 === 3.47.0 (2013-05-01)
 
 * Don't fail for missing conversion proc in pg_typecast_on_load plugin (jeremyevans)

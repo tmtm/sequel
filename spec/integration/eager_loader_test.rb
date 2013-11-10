@@ -496,8 +496,8 @@ describe "many_to_one/one_to_many not referencing primary key" do
     end
   end
   before do
-    Client.delete
-    Invoice.delete
+    Client.dataset.delete
+    Invoice.dataset.delete
     @client1 = Client.create(:name=>'X')
     @client2 = Client.create(:name=>'Y')
     @invoice1 = Invoice.create(:client_name=>'X')
@@ -639,8 +639,8 @@ describe "one to one associations" do
       primary_key :id
     end
     class ::Book < Sequel::Model
-      one_to_one :first_page, :class=>:Page, :conditions=>{:page_number=>1}
-      one_to_one :second_page, :class=>:Page, :conditions=>{:page_number=>2}
+      one_to_one :first_page, :class=>:Page, :conditions=>{:page_number=>1}, :reciprocal=>nil
+      one_to_one :second_page, :class=>:Page, :conditions=>{:page_number=>2}, :reciprocal=>nil
     end
 
     INTEGRATION_DB.create_table!(:pages) do
@@ -649,7 +649,7 @@ describe "one to one associations" do
       Integer :page_number
     end
     class ::Page < Sequel::Model
-      many_to_one :book
+      many_to_one :book, :reciprocal=>nil
     end
 
     @book1 = Book.create

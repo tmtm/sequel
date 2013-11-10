@@ -35,7 +35,9 @@ Sequel はひとつのオブジェクトを取り出すのに、かなりの方�
   # SELECT * FROM artists WHERE id = 1
   => #<Artist @values={:name=>"YJM", :id=>1}>
 
-与えられたプライマリキーのレコードがない場合、nil が返ります。
+与えられたプライマリキーのレコードがない場合、nil が返ります。レコードが見つからなかった場合に例外を上げたい場合は、<tt>Sequel::Model.with_pk!</tt> を使用することができます:
+
+  artist = Artist.with_pk!(1)
 
 ==== +first+ の使用
 
@@ -55,6 +57,9 @@ Sequel はひとつのオブジェクトを取り出すのに、かなりの方�
   # SELECT * FROM artists WHERE (name LIKE 'Y%') LIMIT 1
   => #<Artist @values={:name=>"YJM", :id=>1}>
   
+If there is no matching row, +first+ will return nil.  If you want to
+raise an exception instead, use <tt>first!</tt>.
+
 <tt>Sequel::Dataset#[]</tt> は基本的に +first+ の別名です。違いは引数を取ることです:
 
   DB[:artists][:name => 'YJM']
@@ -66,16 +71,16 @@ Sequel はひとつのオブジェクトを取り出すのに、かなりの方�
 ==== +last+ の使用
 
 データセットの最後のレコードが欲しい場合は、<tt>Sequel::Dataset#last</tt> がわかりやすいメソッドです。
-last はデータセットが順序化されていることを要求することに注意してください。
-順序なしだと、どのオブジェクトでも最初であり最後であるとみなすことができます。
+データセットがモデルデータセットでない場合は、last はデータセットが順序化されていることを要求することに注意してください。
+モデルデータセットでは +last+ はプライマリキーフィールドの逆順を行います:
 
-  artist = Artist.order(:name).last
-  # SELECT * FROM artists ORDER BY name DESC LIMIT 1
+  artist = Artist.last
+  # SELECT * FROM artists ORDER BY id DESC LIMIT 1
   => #<Artist @values={:name=>"YJM", :id=>1}>
 
 注意: +last+ は、データセットを逆順化し、それから +first+ を呼びます。
-これは、データセットに順序がない場合、+last+ が Sequel::Error を raise する理由です。
-そうでないと同じレコードが +first+ として提供して、、多くのユーザーが混乱してしまいます。
+これは、プレーンのデータセットに順序がない場合、+last+ が Sequel::Error を raise する理由です。
+そうでないと +first+ と同じレコードが提供されて、多くのユーザーが混乱してしまいます。
 
 注意: データセットに明白な順序を与えない限り、+last+ は必ずしもデータセットで最後のレコードを与えようとはしません。
 
@@ -264,7 +269,6 @@ order はデータセットを返すため、返されるデータセット上�
 
 フィルタリングはおそらく Sequel で行われるもっとも一般的なデータセット変更アクションです。
 +where+ と +filter+ の両方のメソッドが、データセットの WHERE 節を変更することによって、データセットをフィルタします。
-それぞれまったく同じわけではありませんが、多くの場合は同じように動作します。
 両方とも、後述のように広い種類の入力形式を受け付けます。
 
 === ハッシュ
@@ -408,7 +412,7 @@ SQL::Expression オブジェクトは Sequel モジュールの特異メソッ�
 
   Artist.where("id = #{params[:id]}") # やってはいけません！
   Artist.where("id = ?", params[:id]) # 代わりにこうします
-  Artist.where(:id=>params[:id]) # もっと良いです
+  Artist.where(:id=>params[:id].to_i) # もっと良いです
 
 === 反転
 
@@ -590,7 +594,7 @@ SQL ステートメントの GROUP BY 節を変更するには +group+ を使用
 Sequel はこれを簡単に行えるように +group_and_count+ メソッドを提供します:
 
   Album.group_and_count(:artist_id)
-  # SELECT artist_id, COUNT(*) AS count FROM albums GROUP BY artist_id
+  # SELECT artist_id, count(*) AS count FROM albums GROUP BY artist_id
 
 これは各 artist_id のアルバムの数を返します。
 
@@ -610,23 +614,14 @@ SQL HAVING 節は WHERE 節に似ていますが、グルーピングが適用�
 少なくとも10個のアルバムを持っているアーティストだけを返したい場合などに使用できます:
 
   Album.group_and_count(:artist_id).having{count >= 10}
-  # SELECT artist_id, COUNT(*) AS count FROM albums
+  # SELECT artist_id, count(*) AS count FROM albums
   # GROUP BY artist_id HAVING count >= 10
-
-データセットに既存の HAVING 節がある場合は +filter+ は WHERE 節ではなく HAVING 節を追加します:
-
-  Album.group_and_count(:artist_id).
-   having{count >= 10}.filter{count < 15}
-  # SELECT artist_id, COUNT(*) AS count FROM albums
-  # GROUP BY artist_id HAVING count >= 10 AND count < 15
-
-これは混乱させるので、+filter+ ではなく常に +having+ または +where+ を使用して、作用させたい節を示すことをお勧めします。
 
 WHERE 節と HAVING 節の両方共 +unfiltered+ で削除できます:
 
   Album.group_and_count(:artist_id).having{count >= 10}.
    where(:name.like('A%')).unfiltered
-  # SELECT artist_id, COUNT(*) AS count FROM albums GROUP BY artist_id
+  # SELECT artist_id, count(*) AS count FROM albums GROUP BY artist_id
 
 == 結合
 
@@ -731,7 +726,7 @@ Sequel は値の暗黙的な修飾に最後に結合されたテーブルを使�
   # SELECT * FROM albums INNER JOIN artists
   #  ON (lower(artists.name) = lower(albums.artist_name))
 
-lower の引数が両方の場合で正しく修飾されることに注目してください。
+どちらの場合でも lower の引数が正しく修飾されることに注意してください。Sequel 4 からは、<tt>:qualify=>:deep</tt> オプションがデフォルトになります。
 
 ==== USING 結合
 
@@ -829,7 +824,7 @@ Sequel は、返されるレコードが現在のトランザクションがコ�
 
 === 楽観的ロック
 
-Sequel のビルトインモデルプラグインの一つは楽観的ロックプラグインです。
+Sequel で提供されるモデルプラグインの一つは楽観的ロックプラグインです。
 これは、ふたつの異なる接続が同じ行を変更する場合に、エラーを検出して raise するための独立した方法をデータベースに提供します。
 これは Web フォームのようなものに有用です。Web はステートレスなので、ユーザーがフォームを見ている間トランザクションを保持できません。
 
@@ -894,7 +889,7 @@ SQL 標準は、データセットについての集約情報を得るための�
 +count+ はデータセットのレコード数だけを返します。
 
   Album.count
-  # SELECT COUNT(*) AS count FROM albums LIMIT 1
+  # SELECT count(*) AS count FROM albums LIMIT 1
   => 2
   
 他のメソッドはカラム引数を取り、その引数で集約関数を呼びます:

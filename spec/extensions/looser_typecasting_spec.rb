@@ -2,14 +2,15 @@ require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
 
 describe "LooserTypecasting Extension" do
   before do
-    @db = Sequel::Database.new({})
+    @db = Sequel::Database.new
+    def @db.supports_schema_parsing?() true end
     def @db.schema(*args)
-      [[:id, {}], [:z, {:type=>:float}], [:b, {:type=>:integer}], [:d, {:type=>:decimal}]]
+      [[:id, {}], [:z, {:type=>:float}], [:b, {:type=>:integer}], [:d, {:type=>:decimal}], [:s, {:type=>:string}]]
     end 
     @c = Class.new(Sequel::Model(@db[:items]))
     @db.extension(:looser_typecasting)
     @c.instance_eval do
-      @columns = [:id, :b, :z, :d] 
+      @columns = [:id, :b, :z, :d, :s] 
       def columns; @columns; end 
     end
   end
@@ -22,6 +23,12 @@ describe "LooserTypecasting Extension" do
   specify "should not raise errors for invalid strings in float columns" do
     @c.new(:z=>'a').z.should == 0.0
     @c.new(:z=>'a').z.should be_a_kind_of(Float)
+  end
+
+  specify "should not raise errors for hash or array input to string columns" do
+    @c.new(:s=>'a').s.should == 'a'
+    @c.new(:s=>[]).s.should be_a_kind_of(String)
+    @c.new(:s=>{}).s.should be_a_kind_of(String)
   end
 
   specify "should not raise errors for invalid strings in decimal columns" do

@@ -140,10 +140,15 @@ SQL 関数との比較もできます:
 
 == 文字列検索関数
 
-Sequel.like メソッドを使用して SQL 文字列を検索できます:
+Sequel.like メソッドを使用して大文字小文字を区別して SQL 文字列を検索できます:
 
   items.where(Sequel.like(:name, 'Acme%')).sql
   #=> "SELECT * FROM items WHERE (name LIKE 'Acme%')"
+
+You can search SQL strings in a case insensitive manner using the Sequel.ilike method:
+
+  items.where(Sequel.ilike(:name, 'Acme%')).sql
+  #=> "SELECT * FROM items WHERE (name ILIKE 'Acme%')"
 
 like の引数として Regexp を記述できます。ただしこれはおそらく PostgreSQL と MySQL だけで働きます:
 
@@ -162,7 +167,7 @@ Sequel.join で SQL 文字列を結合できます:
   items.where(Sequel.join([:name, :comment]).like('%acme%')).sql
   #=> "SELECT * FROM items WHERE ((name || comment) LIKE 'Acme%')"
 
-Array#sql_string_join も join 引数を取ります:
+Sequel.join も join 引数を取ります:
 
   items.filter(Sequel.join([:name, :comment], ' ').like('%acme%')).sql
   #=> "SELECT * FROM items WHERE ((name || ' ' || comment) LIKE 'Acme%')"

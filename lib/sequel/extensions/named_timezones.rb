@@ -26,6 +26,12 @@
 # York time.  When data is retrieved from the database, it is
 # converted to Los Angeles time.
 #
+# If you are using database specific timezones, you may want to load
+# this extension into the database in order to support similar API:
+#
+#   DB.extension :named_timezones
+#   DB.timezone = 'America/New_York'
+#
 # Note that typecasting from the database timezone to the application
 # timezone when fetching rows is dependent on the database adapter,
 # and only works on adapters where Sequel itself does the conversion.
@@ -37,6 +43,12 @@ module Sequel
   self.datetime_class = DateTime
   
   module NamedTimezones
+    module DatabaseMethods
+      def timezone=(tz)
+        super(Sequel.send(:convert_timezone_setter_arg, tz))
+      end
+    end
+
     # Handles TZInfo::AmbiguousTime exceptions automatically by providing a
     # proc called with both the datetime value being converted as well as
     # the array of TZInfo::TimezonePeriod results. Example:
@@ -47,7 +59,7 @@ module Sequel
     private 
     
     # Assume the given DateTime has a correct time but a wrong timezone.  It is
-    # currently in UTC timezone, but it should be converted to the input_timzone.
+    # currently in UTC timezone, but it should be converted to the input_timezone.
     # Keep the time the same but convert the timezone to the input_timezone.
     # Expects the input_timezone to be a TZInfo::Timezone instance.
     def convert_input_datetime_other(v, input_timezone)
@@ -82,4 +94,5 @@ module Sequel
   end
   
   extend NamedTimezones
+  Database.register_extension(:named_timezones, NamedTimezones::DatabaseMethods)
 end

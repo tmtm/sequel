@@ -51,9 +51,6 @@ shared_examples_for "eager limit strategies" do
   end
   
   specify "should correctly handle limits and offsets when eager loading many_to_many associations" do
-    if @els == {:eager_limit_strategy=>:correlated_subquery} && Sequel.guarded?(:derby, :mssql)
-      pending("correlated subqueries on many_to_many associations not supported")
-    end
     Album.many_to_many :first_two_tags, {:clone=>:first_two_tags}.merge(@els) if @els
     Album.many_to_many :second_two_tags, {:clone=>:second_two_tags}.merge(@els) if @els
     Album.many_to_many :last_two_tags, {:clone=>:last_two_tags}.merge(@els) if @els
@@ -76,9 +73,6 @@ shared_examples_for "eager limit strategies" do
   end
   
   specify "should correctly handle limits and offsets when eager loading many_through_many associations" do
-    if @els == {:eager_limit_strategy=>:correlated_subquery} && Sequel.guarded?(:derby, :mssql)
-      pending("correlated subqueries on many_through_many associations not supported")
-    end
     Artist.many_through_many :first_two_tags, {:clone=>:first_two_tags}.merge(@els) if @els
     Artist.many_through_many :second_two_tags, {:clone=>:second_two_tags}.merge(@els) if @els
     Artist.many_through_many :last_two_tags, {:clone=>:last_two_tags}.merge(@els) if @els
@@ -573,7 +567,7 @@ describe "Sequel::Model Simple Associations" do
     end
     class ::Album < Sequel::Model(@db)
       plugin :dataset_associations
-      many_to_one :artist
+      many_to_one :artist, :reciprocal=>nil
       many_to_many :tags, :right_key=>:tag_id
       many_to_many :alias_tags, :clone=>:tags, :join_table=>:albums_tags___at
       many_to_many :first_two_tags, :clone=>:tags, :order=>:name, :limit=>2
@@ -603,13 +597,6 @@ describe "Sequel::Model Simple Associations" do
   
   it_should_behave_like "regular and composite key associations"
 
-  describe "with :eager_limit_strategy=>:correlated_subquery" do
-    before do
-      @els = {:eager_limit_strategy=>:correlated_subquery}
-    end
-    it_should_behave_like "eager limit strategies"
-  end unless Sequel.guarded?(:mysql, :db2, :oracle, :h2, :cubrid, :hsqldb)
-
   specify "should handle many_to_one associations with same name as :key" do
     Album.def_column_alias(:artist_id_id, :artist_id)
     Album.many_to_one :artist_id, :key_column =>:artist_id, :class=>Artist
@@ -632,7 +619,7 @@ describe "Sequel::Model Simple Associations" do
     Artist.set_dataset(:artists___ar)
     Album.set_dataset(:albums___a)
     Tag.set_dataset(:tags___t)
-    Artist.one_to_many :balbums, :class=>Album, :key=>:artist_id
+    Artist.one_to_many :balbums, :class=>Album, :key=>:artist_id, :reciprocal=>nil
     Album.many_to_many :btags, :class=>Tag, :join_table=>:albums_tags, :right_key=>:tag_id
     Album.many_to_one :bartist, :class=>Artist, :key=>:artist_id
     Tag.many_to_many :balbums, :class=>Album, :join_table=>:albums_tags, :right_key=>:album_id
@@ -650,13 +637,13 @@ describe "Sequel::Model Simple Associations" do
   
   specify "should have add method accept hashes and create new records" do
     @artist.remove_all_albums
-    Album.delete
+    Album.dataset.delete
     @album = @artist.add_album(:name=>'Al2')
     Album.first[:name].should == 'Al2'
     @artist.albums_dataset.first[:name].should == 'Al2'
     
     @album.remove_all_tags
-    Tag.delete
+    Tag.dataset.delete
     @album.add_tag(:name=>'T2')
     Tag.first[:name].should == 'T2'
     @album.tags_dataset.first[:name].should == 'T2'
@@ -766,7 +753,7 @@ describe "Sequel::Model Composite Key Associations" do
     [:albums_tags, :tags, :albums, :artists].each{|t| @db[t].delete}
     class ::Artist < Sequel::Model(@db)
       plugin :dataset_associations
-      set_primary_key :id1, :id2
+      set_primary_key [:id1, :id2]
       unrestrict_primary_key
       one_to_many :albums, :key=>[:artist_id1, :artist_id2], :order=>:name
       one_to_one :first_album, :clone=>:albums, :order=>:name
@@ -782,9 +769,9 @@ describe "Sequel::Model Composite Key Associations" do
     end
     class ::Album < Sequel::Model(@db)
       plugin :dataset_associations
-      set_primary_key :id1, :id2
+      set_primary_key [:id1, :id2]
       unrestrict_primary_key
-      many_to_one :artist, :key=>[:artist_id1, :artist_id2]
+      many_to_one :artist, :key=>[:artist_id1, :artist_id2], :reciprocal=>nil
       many_to_many :tags, :left_key=>[:album_id1, :album_id2], :right_key=>[:tag_id1, :tag_id2]
       many_to_many :alias_tags, :clone=>:tags, :join_table=>:albums_tags___at
       many_to_many :first_two_tags, :clone=>:tags, :order=>:name, :limit=>2
@@ -793,7 +780,7 @@ describe "Sequel::Model Composite Key Associations" do
     end
     class ::Tag < Sequel::Model(@db)
       plugin :dataset_associations
-      set_primary_key :id1, :id2
+      set_primary_key [:id1, :id2]
       unrestrict_primary_key
       many_to_many :albums, :right_key=>[:album_id1, :album_id2], :left_key=>[:tag_id1, :tag_id2]
     end
@@ -816,22 +803,15 @@ describe "Sequel::Model Composite Key Associations" do
 
   it_should_behave_like "regular and composite key associations"
 
-  describe "with :eager_limit_strategy=>:correlated_subquery" do
-    before do
-      @els = {:eager_limit_strategy=>:correlated_subquery}
-    end
-    it_should_behave_like "eager limit strategies"
-  end if INTEGRATION_DB.dataset.supports_multiple_column_in? && !Sequel.guarded?(:mysql, :db2, :oracle, :hsqldb)
-
   specify "should have add method accept hashes and create new records" do
     @artist.remove_all_albums
-    Album.delete
+    Album.dataset.delete
     @artist.add_album(:id1=>1, :id2=>2, :name=>'Al2')
     Album.first[:name].should == 'Al2'
     @artist.albums_dataset.first[:name].should == 'Al2'
     
     @album.remove_all_tags
-    Tag.delete
+    Tag.dataset.delete
     @album.add_tag(:id1=>1, :id2=>2, :name=>'T2')
     Tag.first[:name].should == 'T2'
     @album.tags_dataset.first[:name].should == 'T2'

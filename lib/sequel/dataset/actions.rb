@@ -14,6 +14,7 @@ module Sequel
       map max min multi_insert paged_each range select_hash select_hash_groups select_map select_order_map
       set single_record single_value sum to_csv to_hash to_hash_groups truncate update
     METHS
+    # REMOVE40 []= insert_multiple set to_csv
 
     # Inserts the given argument into the database.  Returns self so it
     # can be used safely when chaining:
@@ -39,6 +40,7 @@ module Sequel
     #   DB[:table][:id=>1] = {:id=>2} # UPDATE table SET id = 2 WHERE id = 1
     #   # => 1 # number of rows affected
     def []=(conditions, values)
+      Sequel::Deprecation.deprecate('Dataset#[]=', 'Please load the sequel_3_dataset_methods extension to continue using it')
       filter(conditions).update(values)
     end
 
@@ -66,7 +68,7 @@ module Sequel
     #   DB[:table].avg{function(column)} # SELECT avg(function(column)) FROM table LIMIT 1
     #   # => 1
     def avg(column=Sequel.virtual_row(&Proc.new))
-      aggregate_dataset.get{avg(column)}
+      aggregate_dataset.get{avg(column).as(:avg)}
     end
   
     # Returns the columns in the result set in order as an array of symbols.
@@ -101,24 +103,24 @@ module Sequel
     # treated as a virtual row, and the result is used as the argument to
     # count.
     #
-    #   DB[:table].count # SELECT COUNT(*) AS count FROM table LIMIT 1
+    #   DB[:table].count # SELECT count(*) AS count FROM table LIMIT 1
     #   # => 3
-    #   DB[:table].count(:column) # SELECT COUNT(column) AS count FROM table LIMIT 1
+    #   DB[:table].count(:column) # SELECT count(column) AS count FROM table LIMIT 1
     #   # => 2
-    #   DB[:table].count{foo(column)} # SELECT COUNT(foo(column)) AS count FROM table LIMIT 1
+    #   DB[:table].count{foo(column)} # SELECT count(foo(column)) AS count FROM table LIMIT 1
     #   # => 1
     def count(arg=(no_arg=true), &block)
       if no_arg
         if block
           arg = Sequel.virtual_row(&block)
-          aggregate_dataset.get{COUNT(arg).as(count)}
+          aggregate_dataset.get{count(arg).as(count)}
         else
-          aggregate_dataset.get{COUNT(:*){}.as(count)}.to_i
+          aggregate_dataset.get{count(:*){}.as(count)}.to_i
         end
       elsif block
         raise Error, 'cannot provide both argument and block to Dataset#count'
       else
-        aggregate_dataset.get{COUNT(arg).as(count)}
+        aggregate_dataset.get{count(arg).as(count)}
       end
     end
     
@@ -144,11 +146,11 @@ module Sequel
     # Note that this method is not safe to use on many adapters if you are
     # running additional queries inside the provided block.  If you are
     # running queries inside the block, you should use +all+ instead of +each+
-    # for the outer queries, or use a separate thread or shard inside +each+:
+    # for the outer queries, or use a separate thread or shard inside +each+.
     def each
       if @opts[:graph]
         graph_each{|r| yield r}
-      elsif defined?(@row_proc) && (row_proc = @row_proc)
+      elsif row_proc = @row_proc
         fetch_rows(select_sql){|r| yield row_proc.call(r)}
       else
         fetch_rows(select_sql){|r| yield r}
@@ -169,6 +171,7 @@ module Sequel
     # This method should probably should not be called by user code, use +each+
     # instead.
     def fetch_rows(sql)
+      Sequel::Deprecation.deprecate('Dataset#fetch_rows default implementation and Sequel::NotImplemented', 'All dataset instances can be assumed to implement fetch_rows')
       raise NotImplemented, NOTIMPL_MSG
     end
     
@@ -214,7 +217,7 @@ module Sequel
         ds.single_record
       else
         args = (args.size == 1) ? args.first : args
-        if Integer === args
+        if args.is_a?(Integer)
           ds.limit(args).all
         else
           ds.filter(args).single_record
@@ -263,7 +266,7 @@ module Sequel
 
       if column.is_a?(Array)
        if r = ds.single_record
-         r.values_at(*column.map{|c| hash_key_symbol(c)})
+         r.values_at(*hash_key_symbols(column))
        end
       else
         ds.single_value
@@ -373,6 +376,7 @@ module Sequel
     #   # INSERT INTO table (x, y) VALUES (1, 2)
     #   # INSERT INTO table (x, y) VALUES (2, 4)
     def insert_multiple(array, &block)
+      Sequel::Deprecation.deprecate('Dataset#insert_multiple', 'Please load the sequel_3_dataset_methods extension to continue using it')
       if block
         array.map{|i| insert(block.call(i))}
       else
@@ -388,7 +392,7 @@ module Sequel
     #   DB[:table].interval{function(column)} # SELECT (max(function(column)) - min(function(column))) FROM table LIMIT 1
     #   # => 7
     def interval(column=Sequel.virtual_row(&Proc.new))
-      aggregate_dataset.get{max(column) - min(column)}
+      aggregate_dataset.get{(max(column) - min(column)).as(:interval)}
     end
 
     # Reverses the order and then runs #first with the given arguments and block.  Note that this
@@ -442,7 +446,7 @@ module Sequel
     #   DB[:table].max{function(column)} # SELECT max(function(column)) FROM table LIMIT 1
     #   # => 7
     def max(column=Sequel.virtual_row(&Proc.new))
-      aggregate_dataset.get{max(column)}
+      aggregate_dataset.get{max(column).as(:max)}
     end
 
     # Returns the minimum value for the given column/expression.
@@ -453,7 +457,7 @@ module Sequel
     #   DB[:table].min{function(column)} # SELECT min(function(column)) FROM table LIMIT 1
     #   # => 0
     def min(column=Sequel.virtual_row(&Proc.new))
-      aggregate_dataset.get{min(column)}
+      aggregate_dataset.get{min(column).as(:min)}
     end
 
     # This is a front end for import that allows you to submit an array of
@@ -621,6 +625,7 @@ module Sequel
     # Alias for update, but not aliased directly so subclasses
     # don't have to override both methods.
     def set(*args)
+      Sequel::Deprecation.deprecate('Dataset#set', 'Please switch to Dataset#update or load the sequel_3_dataset_methods extension to continue using it')
       update(*args)
     end
     
@@ -649,7 +654,7 @@ module Sequel
     #   DB[:table].sum{function(column)} # SELECT sum(function(column)) FROM table LIMIT 1
     #   # => 10
     def sum(column=Sequel.virtual_row(&Proc.new))
-      aggregate_dataset.get{sum(column)}
+      aggregate_dataset.get{sum(column).as(:sum)}
     end
 
     # Returns a string in CSV format containing the dataset records. By 
@@ -666,6 +671,7 @@ module Sequel
     #   # 1,Jim
     #   # 2,Bob
     def to_csv(include_column_titles = true)
+      Sequel::Deprecation.deprecate('Dataset#to_csv', 'Please load the sequel_3_dataset_methods extension to continue using it')
       n = naked
       cols = n.columns
       csv = ''
@@ -824,17 +830,8 @@ module Sequel
     
     # Internals of +select_hash+ and +select_hash_groups+
     def _select_hash(meth, key_column, value_column)
-      if key_column.is_a?(Array)
-        if value_column.is_a?(Array)
-          select(*(key_column + value_column)).send(meth, key_column.map{|c| hash_key_symbol(c)}, value_column.map{|c| hash_key_symbol(c)})
-        else
-          select(*(key_column + [value_column])).send(meth, key_column.map{|c| hash_key_symbol(c)}, hash_key_symbol(value_column))
-        end
-      elsif value_column.is_a?(Array)
-        select(key_column, *value_column).send(meth, hash_key_symbol(key_column), value_column.map{|c| hash_key_symbol(c)})
-      else
-        select(key_column, value_column).send(meth, hash_key_symbol(key_column), hash_key_symbol(value_column))
-      end
+      select(*(key_column.is_a?(Array) ? key_column : [key_column]) + (value_column.is_a?(Array) ? value_column : [value_column])).
+        send(meth, hash_key_symbols(key_column), hash_key_symbols(value_column))
     end
     
     # Internals of +select_map+ and +select_order_map+
@@ -846,7 +843,7 @@ module Sequel
       ds = ds.select(*select_cols)
       ds = ds.order(*columns.map{|c| unaliased_identifier(c)}) if order
       if column.is_a?(Array) || (columns.length > 1)
-        ds._select_map_multiple(select_cols.map{|c| hash_key_symbol(c)})
+        ds._select_map_multiple(hash_key_symbols(select_cols))
       else
         ds._select_map_single
       end
@@ -881,27 +878,43 @@ module Sequel
     
     # Return a plain symbol given a potentially qualified or aliased symbol,
     # specifying the symbol that is likely to be used as the hash key
-    # for the column when records are returned.
-    def hash_key_symbol(s, recursing=false)
+    # for the column when records are returned.  Return nil if no hash key
+    # can be determined
+    def _hash_key_symbol(s, recursing=false)
       case s
       when Symbol
         _, c, a = split_symbol(s)
         (a || c).to_sym
       when SQL::Identifier, SQL::Wrapper
-        hash_key_symbol(s.value, true)
+        _hash_key_symbol(s.value, true)
       when SQL::QualifiedIdentifier
-        hash_key_symbol(s.column, true)
+        _hash_key_symbol(s.column, true)
       when SQL::AliasedExpression
-        hash_key_symbol(s.aliaz, true)
+        _hash_key_symbol(s.aliaz, true)
       when String
-        if recursing
-          s.to_sym
-        else
-          raise(Error, "#{s.inspect} is not supported, should be a Symbol, SQL::Identifier, SQL::QualifiedIdentifier, or SQL::AliasedExpression") 
-        end
-      else
-        raise(Error, "#{s.inspect} is not supported, should be a Symbol, SQL::Identifier, SQL::QualifiedIdentifier, or SQL::AliasedExpression") 
+        s.to_sym if recursing
       end
+    end
+
+    # Return a plain symbol given a potentially qualified or aliased symbol,
+    # specifying the symbol that is likely to be used as the hash key
+    # for the column when records are returned.  Raise Error if the hash key
+    # symbol cannot be returned.
+    def hash_key_symbol(s)
+      if v = _hash_key_symbol(s)
+        v
+      elsif block_given?
+        yield
+      else
+        raise(Error, "#{s.inspect} is not supported, should be a Symbol, SQL::Identifier, SQL::QualifiedIdentifier, or SQL::AliasedExpression")
+      end
+    end
+
+    # If s is an array, return an array with the given hash key symbols.
+    # Otherwise, return a hash key symbol for the given expression 
+    # If a hash key symbol cannot be determined, raise an error.
+    def hash_key_symbols(s)
+      s.is_a?(Array) ? s.map{|c| hash_key_symbol(c)} : hash_key_symbol(s)
     end
     
     # Modify the identifier returned from the database based on the

@@ -17,15 +17,20 @@ module Sequel
     #
     #   DB[:items].sql #=> "SELECT * FROM items"
     def [](*args)
-      (String === args.first) ? fetch(*args) : from(*args)
+      args.first.is_a?(String) ? fetch(*args) : from(*args)
     end
     
     # Returns a blank dataset for this database.
     #
     #   DB.dataset # SELECT *
     #   DB.dataset.from(:items) # SELECT * FROM items
-    def dataset(opts=nil)
-      @dataset_class.new(self, opts)
+    def dataset(opts=(no_arg_given=true; nil))
+      # REMOVE40
+      if no_arg_given
+        @dataset_class.new(self)
+      else
+        @dataset_class.new(self, opts)
+      end
     end
 
     # Fetches records for an arbitrary SQL statement. If a block is given,
@@ -42,7 +47,7 @@ module Sequel
     #
     #   DB.fetch('SELECT * FROM items WHERE name = ?', my_name).all
     def fetch(sql, *args, &block)
-      ds = dataset.with_sql(sql, *args)
+      ds = @default_dataset.with_sql(sql, *args)
       ds.each(&block) if block
       ds
     end
@@ -53,7 +58,7 @@ module Sequel
     #   DB.from(:items) # SELECT * FROM items
     #   DB.from(:items){id > 2} # SELECT * FROM items WHERE (id > 2)
     def from(*args, &block)
-      ds = dataset.from(*args)
+      ds = @default_dataset.from(*args)
       block ? ds.filter(&block) : ds
     end
     
@@ -63,7 +68,7 @@ module Sequel
     #   DB.select{server_version{}} # SELECT server_version()
     #   DB.select(:id).from(:items) # SELECT id FROM items
     def select(*args, &block)
-      dataset.select(*args, &block)
+      @default_dataset.select(*args, &block)
     end
   end
 end

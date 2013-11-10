@@ -2,7 +2,7 @@ require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
 
 describe "Sequel::Plugins::StringStripper" do
   before do
-    @db = Sequel::Database.new
+    @db = Sequel.mock
     @c = Class.new(Sequel::Model(@db[:test]))
     @c.columns :name, :b
     @c.db_schema[:b][:type] = :blob
@@ -53,6 +53,7 @@ describe "Sequel::Plugins::StringStripper" do
   it "should work correctly for dataset changes" do
     c = Class.new(Sequel::Model(@db[:test]))
     c.plugin :string_stripper
+    def @db.supports_schema_parsing?() true end
     def @db.schema(*) [[:name, {}], [:b, {:type=>:blob}]] end
     c.set_dataset(@db[:test2])
     o = c.new

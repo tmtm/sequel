@@ -235,7 +235,7 @@ describe "Sequel::Plugins::ValidationHelpers" do
     @m.should_not be_valid
   end
 
-  specify "should support validates_not_string" do
+  qspecify "should support validates_not_string" do
     @c.set_validations{validates_not_string(:value)}
     @m.value = 123
     @m.should be_valid
@@ -261,6 +261,11 @@ describe "Sequel::Plugins::ValidationHelpers" do
     @m.meta_def(:db_schema){{:value=>{:type=>:integer}}}
     @m.should_not be_valid
     @m.errors.full_messages.should == ['value is not a valid integer']
+
+    @c.set_validations{validates_schema_types(:value, :message=>'is bad')}
+    @m.meta_def(:db_schema){{:value=>{:type=>:integer}}}
+    @m.should_not be_valid
+    @m.errors.full_messages.should == ['value is bad']
   end
 
   specify "should support validates_numeric" do
@@ -312,14 +317,12 @@ describe "Sequel::Plugins::ValidationHelpers" do
     @m.errors.full_messages.should == ['value is not a valid integer']
     
     @c.set_validations{validates_type(Integer, :value)}
-    @m.value = nil
+    @m.value = 1
     @m.should be_valid
     @m.value = false
     @m.should_not be_valid
     
     @c.set_validations{validates_type([Integer, Float], :value)}
-    @m.value = nil
-    @m.should be_valid
     @m.value = 1
     @m.should be_valid
     @m.value = 1.0
@@ -327,6 +330,12 @@ describe "Sequel::Plugins::ValidationHelpers" do
     @m.value = BigDecimal.new('1.0')
     @m.should_not be_valid
     @m.errors.full_messages.should == ['value is not a valid integer or float']
+  end
+
+  qspecify "should have validates_type skip nil values by default" do
+    @c.set_validations{validates_type([Integer, Float], :value)}
+    @m.value = nil
+    @m.should be_valid
   end
 
   specify "should support validates_not_null" do
@@ -369,9 +378,9 @@ describe "Sequel::Plugins::ValidationHelpers" do
     @c.set_validations{validates_unique(:username)}
     @c.dataset._fetch = proc do |sql|
       case sql
-      when /COUNT.*username = '0records'/
+      when /count.*username = '0records'/
         {:v => 0}
-      when /COUNT.*username = '1record'/
+      when /count.*username = '1record'/
         {:v => 1}
       end
     end
@@ -400,10 +409,10 @@ describe "Sequel::Plugins::ValidationHelpers" do
 
     @user = @c.load(:id=>1, :username => "0records", :password => "anothertest")
     @user.should be_valid
-    MODEL_DB.sqls.last.should == "SELECT COUNT(*) AS count FROM items WHERE ((username = '0records') AND (id != 1)) LIMIT 1"
+    MODEL_DB.sqls.last.should == "SELECT count(*) AS count FROM items WHERE ((username = '0records') AND (id != 1)) LIMIT 1"
     @user = @c.new(:username => "0records", :password => "anothertest")
     @user.should be_valid
-    MODEL_DB.sqls.last.should == "SELECT COUNT(*) AS count FROM items WHERE (username = '0records') LIMIT 1"
+    MODEL_DB.sqls.last.should == "SELECT count(*) AS count FROM items WHERE (username = '0records') LIMIT 1"
   end
   
   it "should support validates_unique with multiple attributes" do
@@ -412,9 +421,9 @@ describe "Sequel::Plugins::ValidationHelpers" do
     @c.set_validations{validates_unique([:username, :password])}
     @c.dataset._fetch = proc do |sql|
       case sql
-      when /COUNT.*username = '0records'/
+      when /count.*username = '0records'/
         {:v => 0}
-      when /COUNT.*username = '1record'/
+      when /count.*username = '1record'/
         {:v => 1}
       end
     end
@@ -450,10 +459,10 @@ describe "Sequel::Plugins::ValidationHelpers" do
 
     @user = @c.load(:id=>1, :username => "0records", :password => "anothertest")
     @user.should be_valid
-    MODEL_DB.sqls.last.should == "SELECT COUNT(*) AS count FROM items WHERE ((username = '0records') AND (password = 'anothertest') AND (id != 1)) LIMIT 1"
+    MODEL_DB.sqls.last.should == "SELECT count(*) AS count FROM items WHERE ((username = '0records') AND (password = 'anothertest') AND (id != 1)) LIMIT 1"
     @user = @c.new(:username => "0records", :password => "anothertest")
     @user.should be_valid
-    MODEL_DB.sqls.last.should == "SELECT COUNT(*) AS count FROM items WHERE ((username = '0records') AND (password = 'anothertest')) LIMIT 1"
+    MODEL_DB.sqls.last.should == "SELECT count(*) AS count FROM items WHERE ((username = '0records') AND (password = 'anothertest')) LIMIT 1"
   end
 
   it "should support validates_unique with a block" do
@@ -465,8 +474,8 @@ describe "Sequel::Plugins::ValidationHelpers" do
     MODEL_DB.reset
     @c.new(:username => "0records", :password => "anothertest").should be_valid
     @c.load(:id=>3, :username => "0records", :password => "anothertest").should be_valid
-    MODEL_DB.sqls.should == ["SELECT COUNT(*) AS count FROM items WHERE ((username = '0records') AND active) LIMIT 1",
-                    "SELECT COUNT(*) AS count FROM items WHERE ((username = '0records') AND active AND (id != 3)) LIMIT 1"]
+    MODEL_DB.sqls.should == ["SELECT count(*) AS count FROM items WHERE ((username = '0records') AND active) LIMIT 1",
+                    "SELECT count(*) AS count FROM items WHERE ((username = '0records') AND active AND (id != 3)) LIMIT 1"]
   end
 
   it "should support validates_unique with a custom filter" do
@@ -478,8 +487,8 @@ describe "Sequel::Plugins::ValidationHelpers" do
     MODEL_DB.reset
     @c.new(:username => "0RECORDS", :password => "anothertest").should be_valid
     @c.load(:id=>3, :username => "0RECORDS", :password => "anothertest").should be_valid
-    MODEL_DB.sqls.should == ["SELECT COUNT(*) AS count FROM items WHERE (lower(username) = '0records') LIMIT 1",
-                    "SELECT COUNT(*) AS count FROM items WHERE ((lower(username) = '0records') AND (id != 3)) LIMIT 1"]
+    MODEL_DB.sqls.should == ["SELECT count(*) AS count FROM items WHERE (lower(username) = '0records') LIMIT 1",
+                    "SELECT count(*) AS count FROM items WHERE ((lower(username) = '0records') AND (id != 3)) LIMIT 1"]
   end
 
   it "should support :only_if_modified option for validates_unique, and not check uniqueness for existing records if values haven't changed" do
@@ -490,7 +499,7 @@ describe "Sequel::Plugins::ValidationHelpers" do
     
     MODEL_DB.reset
     @c.new(:username => "0records", :password => "anothertest").should be_valid
-    MODEL_DB.sqls.should == ["SELECT COUNT(*) AS count FROM items WHERE ((username = '0records') AND (password = 'anothertest')) LIMIT 1"]
+    MODEL_DB.sqls.should == ["SELECT count(*) AS count FROM items WHERE ((username = '0records') AND (password = 'anothertest')) LIMIT 1"]
     MODEL_DB.reset
     m = @c.load(:id=>3, :username => "0records", :password => "anothertest")
     m.should be_valid
@@ -498,23 +507,23 @@ describe "Sequel::Plugins::ValidationHelpers" do
 
     m.username = '1'
     m.should be_valid
-    MODEL_DB.sqls.should == ["SELECT COUNT(*) AS count FROM items WHERE ((username = '1') AND (password = 'anothertest') AND (id != 3)) LIMIT 1"]
+    MODEL_DB.sqls.should == ["SELECT count(*) AS count FROM items WHERE ((username = '1') AND (password = 'anothertest') AND (id != 3)) LIMIT 1"]
 
     m = @c.load(:id=>3, :username => "0records", :password => "anothertest")
     MODEL_DB.reset
     m.password = '1'
     m.should be_valid
-    MODEL_DB.sqls.should == ["SELECT COUNT(*) AS count FROM items WHERE ((username = '0records') AND (password = '1') AND (id != 3)) LIMIT 1"]
+    MODEL_DB.sqls.should == ["SELECT count(*) AS count FROM items WHERE ((username = '0records') AND (password = '1') AND (id != 3)) LIMIT 1"]
     MODEL_DB.reset
     m.username = '2'
     m.should be_valid
-    MODEL_DB.sqls.should == ["SELECT COUNT(*) AS count FROM items WHERE ((username = '2') AND (password = '1') AND (id != 3)) LIMIT 1"]
+    MODEL_DB.sqls.should == ["SELECT count(*) AS count FROM items WHERE ((username = '2') AND (password = '1') AND (id != 3)) LIMIT 1"]
   end
 
   it "should not attempt a database query if the underlying columns have validation errors" do
     @c.columns(:id, :username, :password)
     @c.set_dataset MODEL_DB[:items]
-    @c.set_validations{validates_not_string(:username); validates_unique([:username, :password])}
+    @c.set_validations{errors.add(:username, 'foo'); validates_unique([:username, :password])}
     @c.dataset._fetch = {:v=>0}
     
     MODEL_DB.reset

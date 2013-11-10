@@ -9,9 +9,6 @@ Sequel は一般ライブラリのためのヘルパーは含みません。必�
 
 それ自身のトランザクションの各テストを実行します。テストに推奨される方法です。
 
-これらの例を使用する場合は Sequel 3.29.0 以上を使用してください。
-古いバージョンは <tt>:rollback=>:always</tt> オプションをサポートしていません。
-
 === RSpec 1
 
   class Spec::Example::ExampleGroup
@@ -150,6 +147,10 @@ Sequel は複数に別れたテストスイートを持ちます。すべての�
 +spec_plugin+ rake タスクは Sequel に含まれるプラグインと拡張の sepc を実行します。
 これらもモックデータベース接続を使用し、一般的な Sequel コアとモデル spec にとても似た操作をします。
 
+== rake spec_bin
+
+The +spec_bin+ rake task runs the specs for bin/sequel.  These use an SQLite3 database, and require either the sqlite3 (non-JRuby) or jdbc-sqlite3 (JRuby) gem.
+
 == rake spec_<i>adapter</i> (例えば rake spec_postgres)
 
 <tt>spec_<i>adapter</i></tt> spec はモックではなく実際のデータベース接続に対して実行し、正しい結果をテストします。
@@ -160,6 +161,7 @@ Sequel は複数に別れたテストスイートを持ちます。すべての�
 各データベースについて、データベースに適用するだけの特殊な spec があります。これらはアダプタ spec (adapter spec)と呼ばれます。
 すべての(またはほとんどすべての)データベースに適用される共有 spec もあります。
 これらは統合 spec (integration spec)と呼ばれます。
+For database types that don't have specific adapter tests, you can use rake spec_integration to just run the shared integration tests.
 
 == 環境変数
 
@@ -167,6 +169,8 @@ Seqeul は、テストするデータベースを指定するか、どのよう�
 spec/spec_config.rb.example を spec/spec_config.rb にコピーして、それを変更することでもデータベースを指定することができます。
 詳細はファイルを見てください。
 データベース接続が接続文字列で指定できない場合は、環境変数ではなく spec_config.rb を使用する必要があるでしょう。
+
+Sequel does not create test databases automatically, except for file-based databases such as SQLite/H2/HSQLDB/Derby.  It's up to the user to create the test databases manually and give Sequel a valid connection string in an environment variable (or setup the connection object in spec_config.rb).
 
 === 接続文字列
 

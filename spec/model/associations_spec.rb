@@ -1301,7 +1301,7 @@ describe Sequel::Model, "one_to_many" do
   end
 
   it "should have add_ method accept a composite key" do
-    @c1.set_primary_key :id, :z
+    @c1.set_primary_key [:id, :z]
     @c2.one_to_many :attributes, :class => @c1, :key =>[:node_id, :y], :primary_key=>[:id, :x]
     @c1.dataset._fetch = {:id => 2345, :z => 8, :node_id => 1234, :y=>5}
     
@@ -1326,7 +1326,7 @@ describe Sequel::Model, "one_to_many" do
   end
   
   it "should accept a array of composite primary key values for the remove_ method and remove an existing record" do
-    @c1.set_primary_key :id, :y
+    @c1.set_primary_key [:id, :y]
     @c2.one_to_many :attributes, :class => @c1, :key=>:node_id, :primary_key=>:id
     n = @c2.new(:id => 123)
     @c1.dataset._fetch = {:id=>234, :node_id=>123, :y=>5}
@@ -1682,7 +1682,7 @@ describe Sequel::Model, "one_to_many" do
   end
 
   it "should allow additional arguments given to the remove_ method and pass them onwards to the _remove_ method" do
-    @c2.one_to_many :attributes, :class => @c1
+    @c2.one_to_many :attributes, :class => @c1, :reciprocal=>nil
     p = @c2.load(:id=>10)
     c = @c1.load(:id=>123)
     def p._remove_attribute(x,*y)
@@ -1801,7 +1801,7 @@ describe Sequel::Model, "one_to_many" do
     p.attributes.should == [c]
   end
   
-  it "should raise an error if trying to use the :one_to_one option" do
+  qspecify "should raise an error if trying to use the :one_to_one option" do
     proc{@c2.one_to_many :attribute, :class => @c1, :one_to_one=>true}.should raise_error(Sequel::Error)
     proc{@c2.associate :one_to_many, :attribute, :class => @c1, :one_to_one=>true}.should raise_error(Sequel::Error)
   end
@@ -2371,13 +2371,13 @@ describe Sequel::Model, "many_to_many" do
   end
 
   it "add, remove, and remove_all methods should respect :join_table_block option" do
-    @c2.many_to_many :attributes, :class => @c1, :join_table_block=>proc{|ds| ds.filter(:x=>123).set_overrides(:x=>123)}
+    @c2.many_to_many :attributes, :class => @c1, :join_table_block=>proc{|ds| ds.filter(:x=>123)}
     o = @c2.load(:id => 1234)
     o.add_attribute(@c1.load(:id=>44))
     o.remove_attribute(@c1.load(:id=>45))
     o.remove_all_attributes
     sqls = MODEL_DB.sqls
-    sqls.shift =~ /INSERT INTO attributes_nodes \((node_id|attribute_id|x), (node_id|attribute_id|x), (node_id|attribute_id|x)\) VALUES \((1234|123|44), (1234|123|44), (1234|123|44)\)/
+    sqls.shift =~ /INSERT INTO attributes_nodes \((node_id|attribute_id), (node_id|attribute_id)\) VALUES \((1234|44), (1234|44)\)/
     sqls.should == ["DELETE FROM attributes_nodes WHERE ((x = 123) AND (node_id = 1234) AND (attribute_id = 45))",
       "DELETE FROM attributes_nodes WHERE ((x = 123) AND (node_id = 1234))"]
   end
@@ -3148,7 +3148,7 @@ describe "Sequel::Model Associations with non-column expression keys" do
     @Foo.one_to_one :bar, :primary_key=>:obj_id, :primary_key_column=>Sequel.subscript(:object_ids, 0), :key=>Sequel.subscript(:object_ids, 0), :key_method=>:obj_id, :class=>@Bar
     @Bar.many_to_one :foo, :key=>:obj_id, :key_column=>Sequel.subscript(:object_ids, 0), :primary_key=>Sequel.subscript(:object_ids, 0), :primary_key_method=>:obj_id, :class=>@Foo
     @Foo.many_to_many :mtmbars, :join_table=>:bars_foos, :left_primary_key=>:obj_id, :left_primary_key_column=>Sequel.subscript(:object_ids, 0), :right_primary_key=>Sequel.subscript(:object_ids, 0), :right_primary_key_method=>:obj_id, :left_key=>Sequel.subscript(:foo_ids, 0), :right_key=>Sequel.subscript(:bar_ids, 0), :class=>@Bar
-    @Bar.many_to_many :mtmfoos, :join_table=>:bars_foos, :left_primary_key=>:obj_id, :left_primary_key_column=>Sequel.subscript(:object_ids, 0), :right_primary_key=>Sequel.subscript(:object_ids, 0), :right_primary_key_method=>:obj_id, :left_key=>Sequel.subscript(:bar_ids, 0), :right_key=>Sequel.subscript(:foo_ids, 0), :class=>@Foo
+    @Bar.many_to_many :mtmfoos, :join_table=>:bars_foos, :left_primary_key=>:obj_id, :left_primary_key_column=>Sequel.subscript(:object_ids, 0), :right_primary_key=>Sequel.subscript(:object_ids, 0), :right_primary_key_method=>:obj_id, :left_key=>Sequel.subscript(:bar_ids, 0), :right_key=>Sequel.subscript(:foo_ids, 0), :class=>@Foo, :reciprocal=>nil
     @foo = @Foo.load(:id=>1, :object_ids=>[2])
     @bar = @Bar.load(:id=>1, :object_ids=>[2])
     @db.sqls
@@ -3233,24 +3233,24 @@ describe "Model#pk_or_nil" do
     @m.columns :id, :x, :y
   end
   
-  it "should be default return the value of the :id column" do
+  qspecify "should be default return the value of the :id column" do
     m = @m.load(:id => 111, :x => 2, :y => 3)
     m.pk_or_nil.should == 111
   end
 
-  it "should be return the primary key value for custom primary key" do
+  qspecify "should be return the primary key value for custom primary key" do
     @m.set_primary_key :x
     m = @m.load(:id => 111, :x => 2, :y => 3)
     m.pk_or_nil.should == 2
   end
 
-  it "should be return the primary key value for composite primary key" do
+  qspecify "should be return the primary key value for composite primary key" do
     @m.set_primary_key [:y, :x]
     m = @m.load(:id => 111, :x => 2, :y => 3)
     m.pk_or_nil.should == [3, 2]
   end
 
-  it "should raise if no primary key" do
+  qspecify "should not raise if no primary key" do
     @m.set_primary_key nil
     m = @m.new(:id => 111, :x => 2, :y => 3)
     m.pk_or_nil.should be_nil

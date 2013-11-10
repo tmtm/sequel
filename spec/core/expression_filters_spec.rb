@@ -220,10 +220,9 @@ describe "Blockless Ruby Filters" do
     y.lit.should == y
   end
 
-  it "should return have .sql_literal operate like .to_s" do
+  it "should return have .sql_literal return the literal SQL for the expression" do
     y = Sequel.expr(:x) + 1
     y.sql_literal(@d).should == '(x + 1)'
-    y.sql_literal(@d).should == y.to_s(@d)
     y.sql_literal(@d).should == @d.literal(y)
   end
 
@@ -484,7 +483,7 @@ describe Sequel::SQL::VirtualRow do
     class << @d; remove_method :supports_window_functions? end
     meta_def(@d, :supports_window_functions?){false}
     proc{@d.l{count(:over, :* =>true, :partition=>a, :order=>b, :window=>:win, :frame=>:rows){}}}.should raise_error(Sequel::Error)
-    proc{Sequel::Dataset.new(nil).filter{count(:over, :* =>true, :partition=>a, :order=>b, :window=>:win, :frame=>:rows){}}.sql}.should raise_error(Sequel::Error)
+    proc{Sequel.mock.dataset.filter{count(:over, :* =>true, :partition=>a, :order=>b, :window=>:win, :frame=>:rows){}}.sql}.should raise_error(Sequel::Error)
   end
   
   it "should deal with classes without requiring :: prefix" do
@@ -932,7 +931,7 @@ end
 describe Sequel::SQL::Subscript do
   before do
     @s = Sequel::SQL::Subscript.new(:a, [1])
-    @ds = Sequel::Dataset.new(nil)
+    @ds = Sequel.mock.dataset
   end
 
   specify "should have | return a new non-nested subscript" do

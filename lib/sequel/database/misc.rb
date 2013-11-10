@@ -24,6 +24,14 @@ module Sequel
       :time=>Sequel::SQLTime, :boolean=>[TrueClass, FalseClass].freeze, :float=>Float, :decimal=>BigDecimal,
       :blob=>Sequel::SQL::Blob}.freeze
 
+    # Module to be included in shared adapters so that when the DatabaseMethods are
+    # included in the database, the identifier mangling defaults are reset correctly.
+    module ResetIdentifierMangling
+      def extended(obj)
+        obj.send(:reset_identifier_mangling)
+      end
+    end
+
     # Nested hook Proc; each new hook Proc just wraps the previous one.
     @initialize_hook = Proc.new {|db| }
 
@@ -91,7 +99,6 @@ module Sequel
     # options hash.
     #
     # Accepts the following options:
-    # :default_schema :: The default schema to use, see #default_schema.
     # :default_string_column_size :: The default size of string columns, 255 by default.
     # :identifier_input_method :: A string method symbol to call on identifiers going into the database
     # :identifier_output_method :: A string method symbol to call on identifiers coming from the database
@@ -112,7 +119,7 @@ module Sequel
       @opts[:servers] = {} if @opts[:servers].is_a?(String)
       @opts[:adapter_class] = self.class
       
-      @opts[:single_threaded] = @single_threaded = typecast_value_boolean(@opts.fetch(:single_threaded, @@single_threaded))
+      @opts[:single_threaded] = @single_threaded = typecast_value_boolean(@opts.fetch(:single_threaded, Database.single_threaded))
       @schemas = {}
       @default_schema = @opts.fetch(:default_schema, default_schema_default)
       @default_string_column_size = @opts[:default_string_column_size] || DEFAULT_STRING_COLUMN_SIZE
@@ -128,6 +135,9 @@ module Sequel
       @schema_type_classes = SCHEMA_TYPE_CLASSES.dup
       self.sql_log_level = @opts[:sql_log_level] ? @opts[:sql_log_level].to_sym : :info
       @pool = ConnectionPool.get_pool(self, @opts)
+
+      reset_identifier_mangling
+      adapter_initialize
 
       unless typecast_value_boolean(@opts[:keep_reference]) == false
         Sequel.synchronize{::Sequel::DATABASES.push(self)}
@@ -295,6 +305,10 @@ module Sequel
     
     private
     
+    # Per adapter initialization method, empty by default.
+    def adapter_initialize
+    end
+
     # Returns true when the object is considered blank.
     # The only objects that are blank are nil, false,
     # strings with all whitespace, and ones that respond
@@ -479,7 +493,13 @@ module Sequel
 
     # Typecast the value to a String
     def typecast_value_string(value)
-      value.to_s
+      case value
+      when Hash, Array
+        Sequel::Deprecation.deprecate('Automatically typecasting a hash or array to string for a string column', 'Either typecast the input manually or use the looser_typecasting extension')
+        value.to_s
+      else
+        value.to_s
+      end
     end
 
     # Typecast the value to a Time

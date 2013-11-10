@@ -1,6 +1,6 @@
-module Sequel
-  tsk_require 'nokogiri'
+require 'nokogiri'
 
+module Sequel
   module Plugins
     # The xml_serializer plugin handles serializing entire Sequel::Model
     # objects to XML, and deserializing XML into a single Sequel::Model
@@ -45,7 +45,7 @@ module Sequel
     # You can use a hash value with <tt>:include</tt> to pass options
     # to associations:
     #
-    #   album.to_json(:include=>{:artist=>{:only=>:name}})
+    #   album.to_xml(:include=>{:artist=>{:only=>:name}})
     #   # Output:
     #   <?xml version="1.0"?>
     #   <album>
@@ -131,6 +131,9 @@ module Sequel
         # Return an array of instances of this class based on
         # the provided XML.
         def array_from_xml(xml, opts={})
+          if opts[:all_associations] || opts[:all_columns]
+            Sequel::Deprecation.deprecate("The array_from_xml :all_associations and :all_columns", 'You need to explicitly specify the associations and columns via the :associations and :fields options')
+          end
           node = Nokogiri::XML(xml).children.first
           unless node 
             raise Error, "Malformed XML used"
@@ -141,6 +144,9 @@ module Sequel
         # Return an instance of this class based on the provided
         # XML.
         def from_xml(xml, opts={})
+          if opts[:all_associations] || opts[:all_columns]
+            Sequel::Deprecation.deprecate("The from_xml :all_associations and :all_columns", 'You need to explicitly specify the associations and columns via the :associations and :fields options')
+          end
           from_xml_node(Nokogiri::XML(xml).children.first, opts)
         end
 
@@ -211,6 +217,9 @@ module Sequel
         #                on the input string.  Requires that you load the inflector
         #                extension or another library that adds String#underscore.
         def from_xml(xml, opts={})
+          if opts[:all_associations] || opts[:all_columns]
+            Sequel::Deprecation.deprecate("The from_xml :all_associations and :all_columns", 'You need to explicitly specify the associations and columns via the :associations and :fields options')
+          end
           from_xml_node(Nokogiri::XML(xml).children.first, opts)
         end
 

@@ -3,6 +3,7 @@ require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
 describe "class_table_inheritance plugin" do
   before do
     @db = Sequel.mock(:autoid=>proc{|sql| 1})
+    def @db.supports_schema_parsing?() true end
     def @db.schema(table, opts={})
       {:employees=>[[:id, {:primary_key=>true, :type=>:integer}], [:name, {:type=>:string}], [:kind, {:type=>:string}]],
        :managers=>[[:id, {:type=>:integer}], [:num_staff, {:type=>:integer}]],
@@ -54,6 +55,12 @@ describe "class_table_inheritance plugin" do
     Staff.simple_table.should == nil
   end
   
+    specify "should have working row_proc if using set_dataset in subclass to remove columns" do
+      Manager.set_dataset(Manager.dataset.select(*(Manager.columns - [:blah])))
+      Manager.dataset._fetch = {:id=>1, :kind=>'Executive'}
+      Manager[1].should == Executive.load(:id=>1, :kind=>'Executive')
+    end
+
   specify "should use a joined dataset in subclasses" do
     Employee.dataset.sql.should == 'SELECT * FROM employees'
     Manager.dataset.sql.should == 'SELECT * FROM employees INNER JOIN managers USING (id)'

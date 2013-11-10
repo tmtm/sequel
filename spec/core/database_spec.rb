@@ -81,7 +81,7 @@ describe "A new Database" do
 
   specify "should respect the :identifier_input_method option" do
     Sequel.identifier_input_method = nil
-    Sequel::Database.identifier_input_method.should == ""
+    Sequel::Database.identifier_input_method.should == false
     db = Sequel::Database.new(:identifier_input_method=>nil)
     db.identifier_input_method.should be_nil
     db.identifier_input_method = :downcase
@@ -104,7 +104,7 @@ describe "A new Database" do
   
   specify "should respect the :identifier_output_method option" do
     Sequel.identifier_output_method = nil
-    Sequel::Database.identifier_output_method.should == ""
+    Sequel::Database.identifier_output_method.should == false
     db = Sequel::Database.new(:identifier_output_method=>nil)
     db.identifier_output_method.should be_nil
     db.identifier_output_method = :downcase
@@ -169,7 +169,7 @@ describe "A new Database" do
   
   specify "should respect the identifier_input_method_default method" do
     class Sequel::Database
-      @@identifier_input_method = nil
+      @identifier_input_method = nil
     end
     x = Class.new(Sequel::Database){def identifier_input_method_default; :downcase end}
     x.new({}).identifier_input_method.should == :downcase
@@ -179,7 +179,7 @@ describe "A new Database" do
   
   specify "should respect the identifier_output_method_default method if Sequel.identifier_output_method is not called" do
     class Sequel::Database
-      @@identifier_output_method = nil
+      @identifier_output_method = nil
     end
     x = Class.new(Sequel::Database){def identifier_output_method_default; :upcase end}
     x.new({}).identifier_output_method.should == :upcase
@@ -227,7 +227,7 @@ describe "Sequel.extension" do
 end
 
 describe "Database#connect" do
-  specify "should raise Sequel::NotImplemented" do
+  qspecify "should raise Sequel::NotImplemented" do
     proc {Sequel::Database.new.connect(:default)}.should raise_error(Sequel::NotImplemented)
   end
 end
@@ -505,31 +505,31 @@ describe "Database#valid_connection?" do
 end
 
 describe "Database#execute" do
-  specify "should raise Sequel::NotImplemented" do
+  qspecify "should raise Sequel::NotImplemented" do
     proc {Sequel::Database.new.execute('blah blah')}.should raise_error(Sequel::NotImplemented)
   end
 end
 
 describe "Database#tables" do
-  specify "should raise Sequel::NotImplemented" do
+  qspecify "should raise Sequel::NotImplemented" do
     proc {Sequel::Database.new.tables}.should raise_error(Sequel::NotImplemented)
   end
 end
 
 describe "Database#views" do
-  specify "should raise Sequel::NotImplemented" do
+  qspecify "should raise Sequel::NotImplemented" do
     proc {Sequel::Database.new.views}.should raise_error(Sequel::NotImplemented)
   end
 end
 
 describe "Database#indexes" do
-  specify "should raise Sequel::NotImplemented" do
+  qspecify "should raise Sequel::NotImplemented" do
     proc {Sequel::Database.new.indexes(:table)}.should raise_error(Sequel::NotImplemented)
   end
 end
 
 describe "Database#foreign_key_list" do
-  specify "should raise Sequel::NotImplemented" do
+  qspecify "should raise Sequel::NotImplemented" do
     proc {Sequel::Database.new.foreign_key_list(:table)}.should raise_error(Sequel::NotImplemented)
   end
 end
@@ -611,7 +611,8 @@ describe "Database#test_connection" do
   end
 
   specify "should raise an error if the attempting to connect raises an error" do
-    proc{Sequel::Database.new{raise Sequel::Error, 'blah'}.test_connection}.should raise_error(Sequel::Error)
+    def @db.connect(*) raise Sequel::Error end
+    proc{@db.test_connection}.should raise_error(Sequel::Error)
   end
 end
 
@@ -619,7 +620,7 @@ describe "Database#table_exists?" do
   specify "should test existence by selecting a row from the table's dataset" do
     db = Sequel.mock(:fetch=>[Sequel::Error, [], [{:a=>1}]])
     db.table_exists?(:a).should be_false
-    db.sqls.should == ["SELECT NULL FROM a LIMIT 1"]
+    db.sqls.should == ["SELECT NULL AS nil FROM a LIMIT 1"]
     db.table_exists?(:b).should be_true
     db.table_exists?(:c).should be_true
   end
@@ -654,7 +655,7 @@ shared_examples_for "Database#transaction" do
                        'BEGIN', 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE', 'DROP TABLE serializable', 'COMMIT']
   end
   
-  specify "should support :disconnect=>:retry option for automatically retrying on disconnect" do
+  qspecify "should support :disconnect=>:retry option for automatically retrying on disconnect" do
     a = []
     @db.transaction(:disconnect=>:retry){a << 1; raise Sequel::DatabaseDisconnectError if a.length < 2}
     @db.sqls.should == ['BEGIN', 'ROLLBACK', 'BEGIN', 'COMMIT']
@@ -703,14 +704,12 @@ shared_examples_for "Database#transaction" do
     a.should == [1] * 100
   end
   
-  specify "should raise an error if using :disconnect=>:retry and :retry_on together" do
+  qspecify "should raise an error if using :disconnect=>:retry and :retry_on together" do
     proc{@db.transaction(:disconnect=>:retry, :retry_on=>Sequel::ConstraintViolation){}}.should raise_error(Sequel::Error)
     @db.sqls.should == []
   end
   
   specify "should raise an error if attempting to use :disconnect=>:retry or :retry_on inside another transaction" do
-    proc{@db.transaction{@db.transaction(:disconnect=>:retry){}}}.should raise_error(Sequel::Error)
-    @db.sqls.should == ['BEGIN', 'ROLLBACK']
     proc{@db.transaction{@db.transaction(:retry_on=>Sequel::ConstraintViolation){}}}.should raise_error(Sequel::Error)
     @db.sqls.should == ['BEGIN', 'ROLLBACK']
   end
@@ -1145,7 +1144,7 @@ end
 
 describe "A Database adapter with a scheme" do
   before do
-    @ccc = Class.new(Sequel::Database)
+    @ccc = Class.new(Sequel::Mock::Database)
     @ccc.send(:set_adapter_scheme, :ccc)
   end
 
@@ -1210,6 +1209,7 @@ describe "A Database adapter with a scheme" do
 
     # invalid parameters
     proc {Sequel.ccc('abc', 'def')}.should raise_error(Sequel::Error)
+    proc {Sequel.ccc(1)}.should raise_error(Sequel::Error)
     
     c = Sequel.ccc('mydb')
     c.should be_a_kind_of(@ccc)
@@ -1266,6 +1266,7 @@ describe "A Database adapter with a scheme" do
   end
 
   specify "should test the connection if test parameter is truthy" do
+    @ccc.send(:define_method, :connect){}
     proc{Sequel.connect 'ccc:///d%5bb%5d?test=t'}.should raise_error(Sequel::DatabaseConnectionError)
     proc{Sequel.connect 'ccc:///d%5bb%5d?test=1'}.should raise_error(Sequel::DatabaseConnectionError)
     proc{Sequel.connect 'ccc:///d%5bb%5d', :test=>true}.should raise_error(Sequel::DatabaseConnectionError)
@@ -1365,12 +1366,14 @@ describe "A single threaded database" do
   end
   
   specify "should convert an Exception on connection into a DatabaseConnectionError" do
-    db = Sequel::Database.new(:single_threaded => true, :servers=>{}){raise Exception}
+    db = Sequel::Database.new(:single_threaded => true, :servers=>{})
+    def db.connect(*) raise Exception end
     proc {db.pool.hold {|c|}}.should raise_error(Sequel::DatabaseConnectionError)
   end
   
   specify "should raise a DatabaseConnectionError if the connection proc returns nil" do
-    db = Sequel::Database.new(:single_threaded => true, :servers=>{}){nil}
+    db = Sequel.mock(:single_threaded => true, :servers=>{})
+    def db.connect(*) end
     proc {db.pool.hold {|c|}}.should raise_error(Sequel::DatabaseConnectionError)
   end
 end
@@ -1504,19 +1507,24 @@ describe "Database#get" do
   end
   
   specify "should use Dataset#get to get a single value" do
-    @db.get(1).should == 1
-    @db.sqls.should == ['SELECT 1 LIMIT 1']
+    @db.get(:a).should == 1
+    @db.sqls.should == ['SELECT a LIMIT 1']
     
-    @db.get(Sequel.function(:version))
-    @db.sqls.should == ['SELECT version() LIMIT 1']
+    @db.get(Sequel.function(:version).as(:version))
+    @db.sqls.should == ['SELECT version() AS version LIMIT 1']
   end
 
   specify "should accept a block" do
-    @db.get{1}
-    @db.sqls.should == ['SELECT 1 LIMIT 1']
+    @db.get{a}
+    @db.sqls.should == ['SELECT a LIMIT 1']
     
-    @db.get{version(1)}
-    @db.sqls.should == ['SELECT version(1) LIMIT 1']
+    @db.get{version(a).as(version)}
+    @db.sqls.should == ['SELECT version(a) AS version LIMIT 1']
+  end
+
+  qspecify "should work when an alias cannot be determined" do
+    @db.get(1).should == 1
+    @db.sqls.should == ['SELECT 1 LIMIT 1']
   end
 end
 
@@ -2033,6 +2041,12 @@ describe "Database#typecast_value" do
     end
   end
 
+  qspecify "should typecast hash and array values to String" do
+    [[], {}].each do |i|
+      @db.typecast_value(:string, i).should be_an_instance_of(String)
+    end
+  end
+
   specify "should typecast time values to SQLTime" do
     t = Time.now
     st = Sequel::SQLTime.local(t.year, t.month, t.day, 1, 2, 3)
@@ -2360,15 +2374,15 @@ describe "Database specific exception classes" do
   specify "should use appropriate exception classes for given SQL states" do
     @db.fetch = ArgumentError
     @db.sql_state = '23502'
-    proc{@db.get(1)}.should raise_error(Sequel::NotNullConstraintViolation)
+    proc{@db.get(:a)}.should raise_error(Sequel::NotNullConstraintViolation)
     @db.sql_state = '23503'
-    proc{@db.get(1)}.should raise_error(Sequel::ForeignKeyConstraintViolation)
+    proc{@db.get(:a)}.should raise_error(Sequel::ForeignKeyConstraintViolation)
     @db.sql_state = '23505'
-    proc{@db.get(1)}.should raise_error(Sequel::UniqueConstraintViolation)
+    proc{@db.get(:a)}.should raise_error(Sequel::UniqueConstraintViolation)
     @db.sql_state = '23513'
-    proc{@db.get(1)}.should raise_error(Sequel::CheckConstraintViolation)
+    proc{@db.get(:a)}.should raise_error(Sequel::CheckConstraintViolation)
     @db.sql_state = '40001'
-    proc{@db.get(1)}.should raise_error(Sequel::SerializationFailure)
+    proc{@db.get(:a)}.should raise_error(Sequel::SerializationFailure)
   end
 end
 

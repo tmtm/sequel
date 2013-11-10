@@ -12,11 +12,32 @@ module Sequel
     
     # The database related to this dataset.  This is the Database instance that
     # will execute all of this dataset's queries.
-    attr_accessor :db
+    attr_reader :db
 
     # The hash of options for this dataset, keys are symbols.
-    attr_accessor :opts
-    
+    attr_reader :opts
+
+    # REMOVE40
+    def db=(v)
+      Sequel::Deprecation.deprecate('Dataset#db=', 'Please load the sequel_3_dataset_methods extension to continue using it')
+      @db = v
+    end
+    def opts=(v)
+      Sequel::Deprecation.deprecate('Dataset#opts=', 'Please load the sequel_3_dataset_methods extension to continue using it')
+      @opts = v
+    end
+
+    module DeprecateModifyHash
+      %w'[]= merge! update clear delete delete_if keep_if reject! select! shift store'.each do |meth|
+        class_eval(<<-END, __FILE__, __LINE__+1)
+          def #{meth}(*)
+            Sequel::Deprecation.deprecate('Modifying the initial dataset opts hash is deprecated. Please dup the hash.')
+           super
+          end   
+        END
+      end
+    end
+
     # Constructs a new Dataset instance with an associated database and 
     # options. Datasets are usually constructed by invoking the Database#[] method:
     #
@@ -25,9 +46,11 @@ module Sequel
     # Sequel::Dataset is an abstract class that is not useful by itself. Each
     # database adapter provides a subclass of Sequel::Dataset, and has
     # the Database#dataset method return an instance of that subclass.
-    def initialize(db, opts = nil)
+    def initialize(db, opts = (no_arg_given=true; nil))
       @db = db
-      @opts = opts || {}
+      # REMOVE40
+      Sequel::Deprecation.deprecate('Passing the opts argument to Database#dataset or Dataset#initialize', 'Clone the dataset afterward to change the opts') unless no_arg_given
+      @opts = opts || {}.extend(DeprecateModifyHash)
     end
 
     # Define a hash value such that datasets with the same DB, opts, and SQL
@@ -127,6 +150,7 @@ module Sequel
       elsif db.respond_to?(:identifier_input_method)
         @identifier_input_method = db.identifier_input_method
       else
+        Sequel::Deprecation.deprecate('Calling Dataset#identifier_input_method for a dataset where the database doesn\'t implement identifier_input_method will raise a NoMethodError in Sequel 4.')
         @identifier_input_method = nil
       end
     end
@@ -139,6 +163,7 @@ module Sequel
       elsif db.respond_to?(:identifier_output_method)
         @identifier_output_method = db.identifier_output_method
       else
+        Sequel::Deprecation.deprecate('Calling Dataset#identifier_output_method for a dataset where the database doesn\'t implement identifier_output_method will raise a NoMethodError in Sequel 4.')
         @identifier_output_method = nil
       end
     end

@@ -44,12 +44,6 @@ module Sequel
       # Hash of connection procs for converting
       attr_reader :conversion_procs
 
-      def initialize(opts={})
-        super
-        @conversion_procs = DB2_TYPES.dup
-        @conversion_procs[DB2CLI::SQL_TYPE_TIMESTAMP] = method(:to_application_timestamp_db2)
-      end
-
       def connect(server)
         opts = server_opts(server)
         dbc = checked_error("Could not allocate database connection"){DB2CLI.SQLAllocHandle(DB2CLI::SQL_HANDLE_DBC, NullHandle)}
@@ -65,7 +59,10 @@ module Sequel
       def execute(sql, opts={}, &block)
         synchronize(opts[:server]){|conn| log_connection_execute(conn, sql, &block)}
       end
-      alias do execute
+      def do(*a, &block)
+        Sequel::Deprecation.deprecate('Database#do', 'Please use Database#execute')
+        execute(*a, &block)
+      end
 
       def execute_insert(sql, opts={})
         synchronize(opts[:server]) do |conn|
@@ -115,6 +112,11 @@ module Sequel
       end
 
       private
+
+      def adapter_initialize
+        @conversion_procs = DB2_TYPES.dup
+        @conversion_procs[DB2CLI::SQL_TYPE_TIMESTAMP] = method(:to_application_timestamp_db2)
+      end
 
       def database_error_classes
         [DB2Error]

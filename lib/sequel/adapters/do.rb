@@ -14,20 +14,20 @@ module Sequel
     # Contains procs keyed on sub adapter type that extend the
     # given database object so it supports the correct database type.
     DATABASE_SETUP = {:postgres=>proc do |db|
-        Sequel.tsk_require 'do_postgres'
-        Sequel.ts_require 'adapters/do/postgres'
+        require 'do_postgres'
+        Sequel.require 'adapters/do/postgres'
         db.extend(Sequel::DataObjects::Postgres::DatabaseMethods)
         db.extend_datasets Sequel::Postgres::DatasetMethods
       end,
       :mysql=>proc do |db|
-        Sequel.tsk_require 'do_mysql'
-        Sequel.ts_require 'adapters/do/mysql'
+        require 'do_mysql'
+        Sequel.require 'adapters/do/mysql'
         db.extend(Sequel::DataObjects::MySQL::DatabaseMethods)
         db.dataset_class = Sequel::DataObjects::MySQL::Dataset
       end,
       :sqlite3=>proc do |db|
-        Sequel.tsk_require 'do_sqlite3'
-        Sequel.ts_require 'adapters/do/sqlite'
+        require 'do_sqlite3'
+        Sequel.require 'adapters/do/sqlite'
         db.extend(Sequel::DataObjects::SQLite::DatabaseMethods)
         db.extend_datasets Sequel::SQLite::DatasetMethods
         db.set_integer_booleans
@@ -43,18 +43,6 @@ module Sequel
       DISCONNECT_ERROR_RE = /terminating connection due to administrator command/
 
       set_adapter_scheme :do
-      
-      # Call the DATABASE_SETUP proc directly after initialization,
-      # so the object always uses sub adapter specific code.  Also,
-      # raise an error immediately if the connection doesn't have a
-      # uri, since DataObjects requires one.
-      def initialize(opts)
-        super
-        raise(Error, "No connection string specified") unless uri
-        if prok = DATABASE_SETUP[subadapter.to_sym]
-          prok.call(self)
-        end
-      end
       
       # Setup a DataObjects::Connection to the database.
       def connect(server)
@@ -118,6 +106,17 @@ module Sequel
       end
 
       private
+      
+      # Call the DATABASE_SETUP proc directly after initialization,
+      # so the object always uses sub adapter specific code.  Also,
+      # raise an error immediately if the connection doesn't have a
+      # uri, since DataObjects requires one.
+      def adapter_initialize
+        raise(Error, "No connection string specified") unless uri
+        if prok = DATABASE_SETUP[subadapter.to_sym]
+          prok.call(self)
+        end
+      end
       
       # Method to call on a statement object to execute SQL that does
       # not return any rows.

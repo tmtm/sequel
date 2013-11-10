@@ -165,7 +165,7 @@ describe Sequel::Model, "hook_class_methods plugin" do
 end
 
 describe "Model#after_initialize" do
-  specify "should be called after initialization" do
+  qspecify "should be called after initialization" do
     values1 = nil
     reached_after_initialized = false
     
@@ -325,7 +325,7 @@ describe "Model#before_validation && Model#after_validation" do
       after_validation{MODEL_DB << "BLAH after"}
 
       def self.validate(o)
-        o.errors[:id] << 'not valid' unless o[:id] == 2233
+        o.errors.add(:id, 'not valid') unless o[:id] == 2233
       end
       columns :id
     end

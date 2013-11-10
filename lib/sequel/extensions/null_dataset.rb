@@ -29,11 +29,14 @@
 
 module Sequel
   class Dataset
+    module Nullifiable
+    end
+
     module NullDataset
       # Create a new dataset from the dataset (which won't
       # be nulled) to get the columns if they aren't already cached.
       def columns
-        @columns ||= db.dataset(@opts).columns
+        @columns ||= db.dataset.clone(@opts).columns
       end
 
       # Return 0 without sending a database query.
@@ -90,7 +93,10 @@ module Sequel
 
     # Nullify the current dataset
     def nullify!
+      Sequel::Deprecation.deprecate('Loading the null_dataset extension globally', "Please use Database/Dataset#extension to load the extension into this dataset") unless is_a?(Nullifiable)
       extend NullDataset
     end
   end
+
+  Dataset.register_extension(:null_dataset, Dataset::Nullifiable)
 end

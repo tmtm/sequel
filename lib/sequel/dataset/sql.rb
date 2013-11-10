@@ -336,6 +336,7 @@ module Sequel
     # Do not call this method with untrusted input, as that can result in
     # arbitrary code execution.
     def self.def_append_methods(meths)
+      Sequel::Deprecation.deprecate('Dataset.def_append_methods', "There is no replacement planned")
       meths.each do |meth|
         class_eval(<<-END, __FILE__, __LINE__ + 1)
           def #{meth}(*args, &block)
@@ -346,8 +347,27 @@ module Sequel
         END
       end
     end
-    def_append_methods(PUBLIC_APPEND_METHODS + PRIVATE_APPEND_METHODS)
+    (PUBLIC_APPEND_METHODS + PRIVATE_APPEND_METHODS - [:literal, :quote_identifier, :quote_schema_table]).each do |meth|
+      class_eval(<<-END, __FILE__, __LINE__ + 1)
+        def #{meth}(*args, &block)
+          Sequel::Deprecation.deprecate('Dataset##{meth}', "Please switch to Dataset##{meth}_append")
+          s = ''
+          #{meth}_append(s, *args, &block)
+          s
+        end
+      END
+    end
     private(*PRIVATE_APPEND_METHODS)
+
+    [:literal, :quote_identifier, :quote_schema_table].each do |meth|
+      class_eval(<<-END, __FILE__, __LINE__ + 1)
+        def #{meth}(*args, &block)
+          s = ''
+          #{meth}_append(s, *args, &block)
+          s
+        end
+      END
+    end
 
     # SQL fragment for AliasedExpression
     def aliased_expression_sql_append(sql, ae)
@@ -601,13 +621,21 @@ module Sequel
           sql << s
           literal_append(sql, args[i]) unless i == len
         end
+        unless str.length == args.length || str.length == args.length + 1
+          Sequel::Deprecation.deprecate("Using a mismatched number of placeholders (#{str.length}) and placeholder arguments (#{args.length}) is deprecated and will raise an Error in Sequel 4.")
+        end
       else
         i = -1
         loop do
           previous, q, str = str.partition(QUESTION_MARK)
           sql << previous
-           literal_append(sql, args.at(i+=1)) unless q.empty?
-          break if str.empty?
+          literal_append(sql, args.at(i+=1)) unless q.empty?
+          if str.empty?
+            unless i + 1 == args.length
+              Sequel::Deprecation.deprecate("Using a mismatched number of placeholders (#{i+1}) and placeholder arguments (#{args.length}) is deprecated and will raise an Error in Sequel 4.")
+            end
+            break
+          end
         end
       end
       sql << PAREN_CLOSE if pls.parens
@@ -665,7 +693,7 @@ module Sequel
     # Note that this function does not handle tables with more than one
     # level of qualification (e.g. database.schema.table on Microsoft
     # SQL Server).
-    def schema_and_table(table_name, sch=(db.default_schema if db))
+    def schema_and_table(table_name, sch=(db._default_schema if db))
       sch = sch.to_s if sch
       case table_name
       when Symbol
@@ -921,6 +949,7 @@ module Sequel
       end
     end
 
+    # An expression for how to handle an empty array lookup
     def empty_array_value(op, cols)
       if Sequel.empty_array_handle_nulls
         c = Array(cols)
@@ -978,7 +1007,12 @@ module Sequel
         literal_append(sql, v)
       end
     end
-    alias table_ref_append identifier_append 
+
+    # REMOVE40
+    def table_ref_append(sql, v)
+      Sequel::Deprecation.deprecate('Dataset#table_ref_append', "Please switch to Dataset#identifier_append")
+      identifier_append(sql, v)
+    end
     
     # Append all identifiers in args interspersed by commas.
     def identifier_list_append(sql, args)
@@ -1196,7 +1230,7 @@ module Sequel
     # Returns a qualified column name (including a table name) if the column
     # name isn't already qualified.
     def qualified_column_name(column, table)
-      if Symbol === column 
+      if column.is_a?(Symbol)
         c_table, column, _ = split_symbol(column)
         unless c_table
           case table

@@ -3,6 +3,7 @@ require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
 describe Sequel::Model, "TypecastOnLoad plugin" do
   before do
     @db = Sequel.mock(:fetch=>{:id=>1, :b=>"1", :y=>"0"}, :columns=>[:id, :b, :y], :numrows=>1)
+    def @db.supports_schema_parsing?() true end
     def @db.schema(*args)
       [[:id, {}], [:y, {:type=>:boolean, :db_type=>'tinyint(1)'}], [:b, {:type=>:integer, :db_type=>'integer'}]]
     end
@@ -24,7 +25,7 @@ describe Sequel::Model, "TypecastOnLoad plugin" do
 
   specify "should call setter method with value when reloading the object, for all given columns" do
     @c.plugin :typecast_on_load, :b
-    o = @c.new({:id=>1, :b=>"1", :y=>"0"}, true)
+    o = @c.load(:id=>1, :b=>"1", :y=>"0")
     o.refresh
     o.values.should == {:id=>1, :b=>1, :y=>"0"}
     o.bset.should == true
@@ -33,7 +34,7 @@ describe Sequel::Model, "TypecastOnLoad plugin" do
   specify "should call setter method with value when automatically reloading the object on creation via insert_select" do
     @c.plugin :typecast_on_load, :b
     @c.dataset.meta_def(:insert_select){|h| insert(h); first}
-    o = @c.new({:id=>1, :b=>"1", :y=>"0"}, true)
+    o = @c.load(:id=>1, :b=>"1", :y=>"0")
     o.save.values.should == {:id=>1, :b=>1, :y=>"0"}
     o.bset.should == true
   end

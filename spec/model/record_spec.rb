@@ -127,9 +127,15 @@ describe "Model#save" do
     proc{o.save}.should_not raise_error
   end
   
-  it "should update only the given columns if given" do
+  qspecify "should update only the given columns if given" do
     o = @c.load(:id => 3, :x => 1, :y => nil)
     o.save(:y)
+    MODEL_DB.sqls.first.should == "UPDATE items SET y = NULL WHERE (id = 3)"
+  end
+  
+  it "should respect the :columns option to specify the columns to save" do
+    o = @c.load(:id => 3, :x => 1, :y => nil)
+    o.save(:columns=>:y)
     MODEL_DB.sqls.first.should == "UPDATE items SET y = NULL WHERE (id = 3)"
   end
   
@@ -137,9 +143,9 @@ describe "Model#save" do
     o = @c.load(:id => 3, :x => 1, :y => nil)
     o[:y] = 4
     o.changed_columns.should == [:y]
-    o.save(:x)
+    o.save(:columns=>:x)
     o.changed_columns.should == [:y]
-    o.save(:y)
+    o.save(:columns=>:y)
     o.changed_columns.should == []
   end
   
@@ -182,7 +188,7 @@ describe "Model#save" do
     o = @c.load(:id => 23,:x => 2, :y => nil)
     o[:x] = 2
     o[:y] = 22
-    o.save(:x)
+    o.save(:columns=>:x)
     res.should == [{:x=>2},nil]
     o.after_save
     res.should == [nil, nil]
@@ -190,19 +196,19 @@ describe "Model#save" do
   
   it "should use Model's use_transactions setting by default" do
     @c.use_transactions = true
-    @c.load(:id => 3, :x => 1, :y => nil).save(:y)
+    @c.load(:id => 3, :x => 1, :y => nil).save(:columns=>:y)
     MODEL_DB.sqls.should == ["BEGIN", "UPDATE items SET y = NULL WHERE (id = 3)", "COMMIT"]
     @c.use_transactions = false
-    @c.load(:id => 3, :x => 1, :y => nil).save(:y)
+    @c.load(:id => 3, :x => 1, :y => nil).save(:columns=>:y)
     MODEL_DB.sqls.should == ["UPDATE items SET y = NULL WHERE (id = 3)"]
   end
 
   it "should inherit Model's use_transactions setting" do
     @c.use_transactions = true
-    Class.new(@c).load(:id => 3, :x => 1, :y => nil).save(:y)
+    Class.new(@c).load(:id => 3, :x => 1, :y => nil).save(:columns=>:y)
     MODEL_DB.sqls.should == ["BEGIN", "UPDATE items SET y = NULL WHERE (id = 3)", "COMMIT"]
     @c.use_transactions = false
-    Class.new(@c).load(:id => 3, :x => 1, :y => nil).save(:y)
+    Class.new(@c).load(:id => 3, :x => 1, :y => nil).save(:columns=>:y)
     MODEL_DB.sqls.should == ["UPDATE items SET y = NULL WHERE (id = 3)"]
   end
 
@@ -210,23 +216,23 @@ describe "Model#save" do
     o = @c.load(:id => 3, :x => 1, :y => nil)
     o.use_transactions = false
     @c.use_transactions = true
-    o.save(:y)
+    o.save(:columns=>:y)
     MODEL_DB.sqls.should == ["UPDATE items SET y = NULL WHERE (id = 3)"]
     o = @c.load(:id => 3, :x => 1, :y => nil)
     o.use_transactions = true
     @c.use_transactions = false 
-    o.save(:y)
+    o.save(:columns=>:y)
     MODEL_DB.sqls.should == ["BEGIN", "UPDATE items SET y = NULL WHERE (id = 3)", "COMMIT"]
   end
 
   it "should use :transaction option if given" do
     o = @c.load(:id => 3, :x => 1, :y => nil)
     o.use_transactions = true
-    o.save(:y, :transaction=>false)
+    o.save(:columns=>:y, :transaction=>false)
     MODEL_DB.sqls.should == ["UPDATE items SET y = NULL WHERE (id = 3)"]
     o = @c.load(:id => 3, :x => 1, :y => nil)
     o.use_transactions = false
-    o.save(:y, :transaction=>true)
+    o.save(:columns=>:y, :transaction=>true)
     MODEL_DB.sqls.should == ["BEGIN", "UPDATE items SET y = NULL WHERE (id = 3)", "COMMIT"]
   end
 
@@ -237,7 +243,7 @@ describe "Model#save" do
     def o.before_save
       false
     end
-    proc { o.save(:y) }.should raise_error(Sequel::BeforeHookFailed)
+    proc { o.save(:columns=>:y) }.should raise_error(Sequel::BeforeHookFailed)
     MODEL_DB.sqls.should == ["BEGIN", "ROLLBACK"]
   end
 
@@ -248,7 +254,7 @@ describe "Model#save" do
     def o.before_save
       false
     end
-    proc { o.save(:y, :raise_on_failure => true) }.should raise_error(Sequel::BeforeHookFailed)
+    proc { o.save(:columns=>:y, :raise_on_failure => true) }.should raise_error(Sequel::BeforeHookFailed)
     MODEL_DB.sqls.should == ["BEGIN", "ROLLBACK"]
   end
 
@@ -260,7 +266,7 @@ describe "Model#save" do
       false
     end
     MODEL_DB.transaction do
-      o.save(:y).should == nil
+      o.save(:columns=>:y).should == nil
       MODEL_DB.run "BLAH"
     end
     MODEL_DB.sqls.should == ["BEGIN", "BLAH", "COMMIT"]
@@ -273,7 +279,7 @@ describe "Model#save" do
     def o.before_save
       false
     end
-    o.save(:y).should == nil
+    o.save(:columns=>:y).should == nil
     MODEL_DB.sqls.should == ["BEGIN", "ROLLBACK"]
   end
 
@@ -283,7 +289,7 @@ describe "Model#save" do
     def o.before_save
       raise Sequel::Rollback
     end
-    proc { o.save(:y) }.should raise_error(Sequel::Rollback)
+    proc { o.save(:columns=>:y) }.should raise_error(Sequel::Rollback)
     MODEL_DB.sqls.should == []
   end
 
@@ -674,7 +680,7 @@ describe Sequel::Model, "with a primary key" do
     model_a.primary_key.should == :a
   end
 
-  it "should support multi argument composite keys" do
+  qspecify "should support multi argument composite keys" do
     model_a = Class.new(Sequel::Model){ set_primary_key :a, :b }
     model_a.primary_key.should == [:a, :b]
   end
@@ -715,7 +721,7 @@ describe Sequel::Model, "#this" do
   end
 
   it "should support composite primary keys" do
-    @example.set_primary_key :x, :y
+    @example.set_primary_key [:x, :y]
     instance = @example.load(:x => 4, :y => 5)
     instance.this.sql.should =~ /SELECT \* FROM examples WHERE \(\([xy] = [45]\) AND \([xy] = [45]\)\) LIMIT 1/
   end
@@ -858,7 +864,7 @@ describe Sequel::Model, "#set" do
 
   it "should raise error if strict_param_setting is true and column is restricted" do
     @o1.strict_param_setting = true
-    @c.set_restricted_columns :x
+    @c.set_allowed_columns
     proc{@o1.set('x' => 1)}.should raise_error(Sequel::Error)
   end
 
@@ -1087,7 +1093,6 @@ describe Sequel::Model, "#(set|update)_(all|except|only)" do
       set_primary_key :id
       columns :x, :y, :z, :id
       set_allowed_columns :x
-      set_restricted_columns :y
     end
     @c.strict_param_setting = false
     @o1 = @c.new
@@ -1105,7 +1110,10 @@ describe Sequel::Model, "#(set|update)_(all|except|only)" do
     proc{@c.new.set_only({:x => 1, :y => 2, :z=>3}, :x, :y)}.should raise_error(Sequel::Error)
     (o = @c.new).set_only({:x => 1, :y => 2}, :x, :y)
     o.values.should == {:x => 1, :y => 2}
+  end
 
+  qspecify "should raise errors for set_except if not all hash fields can be set and strict_param_setting is true" do
+    @c.strict_param_setting = true
     proc{@c.new.set_except({:x => 1, :y => 2, :z=>3, :id=>4}, :x, :y)}.should raise_error(Sequel::Error)
     proc{@c.new.set_except({:x => 1, :y => 2, :z=>3}, :x, :y)}.should raise_error(Sequel::Error)
     (o = @c.new).set_except({:z => 3}, :x, :y)
@@ -1126,7 +1134,7 @@ describe Sequel::Model, "#(set|update)_(all|except|only)" do
     @o1.values.should == {:x => 9, :y => 8, :id=>7}
   end
 
-  it "#set_except should not set given attributes or the primary key" do
+  qspecify "#set_except should not set given attributes or the primary key" do
     @o1.set_except({:x => 1, :y => 2, :z=>3, :id=>4}, [:y, :z])
     @o1.values.should == {:x => 1}
     @o1.set_except({:x => 4, :y => 2, :z=>3, :id=>4}, :y, :z)
@@ -1149,7 +1157,7 @@ describe Sequel::Model, "#(set|update)_(all|except|only)" do
     MODEL_DB.sqls.should == ["INSERT INTO items (x) VALUES (1)", "SELECT * FROM items WHERE (id = 10) LIMIT 1"]
   end
 
-  it "#update_except should not update given attributes" do
+  qspecify "#update_except should not update given attributes" do
     @o1.update_except({:x => 1, :y => 2, :z=>3, :id=>4}, [:y, :z])
     MODEL_DB.sqls.should == ["INSERT INTO items (x) VALUES (1)", "SELECT * FROM items WHERE (id = 10) LIMIT 1"]
     @c.new.update_except({:x => 1, :y => 2, :z=>3, :id=>4}, :y, :z)
@@ -1255,12 +1263,12 @@ describe Sequel::Model, "#exists?" do
 
   it "should do a query to check if the record exists" do
     @model.load(:id=>1).exists?.should be_true
-    MODEL_DB.sqls.should == ['SELECT 1 FROM items WHERE (id = 1) LIMIT 1']
+    MODEL_DB.sqls.should == ['SELECT 1 AS one FROM items WHERE (id = 1) LIMIT 1']
   end
 
   it "should return false when #this.count == 0" do
     @model.load(:id=>2).exists?.should be_false
-    MODEL_DB.sqls.should == ['SELECT 1 FROM items WHERE (id = 2) LIMIT 1']
+    MODEL_DB.sqls.should == ['SELECT 1 AS one FROM items WHERE (id = 2) LIMIT 1']
   end
 
   it "should return false without issuing a query if the model object is new" do
@@ -1382,10 +1390,10 @@ describe Sequel::Model, "#hash" do
   specify "should be the same only for objects with the same class and pk if pk is composite and all values are non-NULL" do
     z = Class.new(Sequel::Model)
     z.columns :id, :id2, :x
-    z.set_primary_key(:id, :id2)
+    z.set_primary_key([:id, :id2])
     y = Class.new(Sequel::Model)
     y.columns :id, :id2, :x
-    y.set_primary_key(:id, :id2)
+    y.set_primary_key([:id, :id2])
     a = z.load(:id => 1, :id2=>2, :x => 3)
     
     a.hash.should == z.load(:id => 1, :id2=>2, :x => 4).hash
@@ -1396,10 +1404,10 @@ describe Sequel::Model, "#hash" do
   specify "should be the same only for objects with the same class and value if pk is composite and one values is NULL" do
     z = Class.new(Sequel::Model)
     z.columns :id, :id2, :x
-    z.set_primary_key(:id, :id2)
+    z.set_primary_key([:id, :id2])
     y = Class.new(Sequel::Model)
     y.columns :id, :id2, :x
-    y.set_primary_key(:id, :id2)
+    y.set_primary_key([:id, :id2])
 
     a = z.load(:id => 1, :id2 => nil, :x => 3)
     a.hash.should == z.load(:id => 1, :id2=>nil, :x => 3).hash
