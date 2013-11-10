@@ -1,3 +1,39 @@
+=== 4.2.0 (2013-09-01)
+
+* Support custom :flags option in mysql2 adapter (jeremyevans) (#700)
+
+* Add implementations of Dataset#freeze and Dataset#dup (jeremyevans)
+
+* Add implementations of Model#dup and Model#clone (jeremyevans)
+
+* Don't have partial_indexes returned by Database#indexes on MSSQL 2008+ (jeremyevans)
+
+* Support partial indexes on SQLite 3.8.0+ (jeremyevans)
+
+* Add Database#supports_partial_indexes? to check for partial index support (mluu, jeremyevans) (#698)
+
+* The static_cache plugin now disallows saving/destroying if the :frozen=>false option is not used (jeremyevans)
+
+* Support :frozen=>false option in static_cache plugin, for having new instances returned instead of frozen cached instances (jeremyevans)
+
+* Add pg_static_cache_updater Database extension for listening for changes to tables and updating static_cache caches automatically (jeremyevans)
+
+* Add mssql_emulate_lateral_with_apply extension for emulating LATERAL queries using CROSS/OUTER APPLY (jeremyevans)
+
+* Support LATERAL queries via Dataset#lateral (jeremyevans)
+
+* Add pg_loose_count Database extension, for fast approximate counts of PostgreSQL tables (jeremyevans)
+
+* Add from_block Database extension, for having Database#from block affect FROM instead of WHERE (jeremyevans)
+
+* Support :cursor_name option in postgres adapter Dataset#use_cursor (heeringa, jeremyevans) (#696)
+
+* Fix placeholder literal strings when used with an empty placeholder hash (trydionel, jeremyevans) (#695)
+
+=== 4.1.1 (2013-08-01)
+
+* Fix select_map, select_order_map, and single_value methods on eager_graphed datasets (jeremyevans)
+
 === 4.1.0 (2013-08-01)
 
 * Support :inherits option in Database#create_table on PostgreSQL, for table inheritance (jeremyevans)

@@ -36,12 +36,11 @@ module Sequel
     QUERY_METHODS = (<<-METHS).split.map{|x| x.to_sym} + JOIN_METHODS
       add_graph_aliases and distinct except exclude exclude_having exclude_where
       filter for_update from from_self graph grep group group_and_count group_by having intersect invert
-      limit lock_style naked or order order_append order_by order_more order_prepend paginate qualify query
+      limit lock_style naked or order order_append order_by order_more order_prepend qualify
       reverse reverse_order select select_all select_append select_group select_more server
-      set_defaults set_graph_aliases set_overrides unfiltered ungraphed ungrouped union
+      set_graph_aliases unfiltered ungraphed ungrouped union
       unlimited unordered where with with_recursive with_sql
     METHS
-    # REMOVE40: query paginate set_defaults set_overrides
 
     # Register an extension callback for Dataset objects.  ext should be the
     # extension name symbol, and mod should either be a Module that the
@@ -499,6 +498,16 @@ module Sequel
     end
     UNCONDITIONED_JOIN_TYPES.each do |jtype|
       class_eval("def #{jtype}_join(table); raise(Sequel::Error, '#{jtype}_join does not accept join table blocks') if block_given?; join_table(:#{jtype}, table) end", __FILE__, __LINE__)
+    end
+
+    # Marks this dataset as a lateral dataset.  If used in another dataset's FROM
+    # or JOIN clauses, it will surround the subquery with LATERAL to enable it
+    # to deal with previous tables in the query:
+    #
+    #   DB.from(:a, DB[:b].where(:a__c=>:b__d).lateral)
+    #   # SELECT * FROM a, LATERAL (SELECT * FROM b WHERE (a.c = b.d))
+    def lateral
+      clone(:lateral=>true)
     end
 
     # If given an integer, the dataset will contain only the first l results.

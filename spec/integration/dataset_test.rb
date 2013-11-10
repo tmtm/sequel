@@ -59,6 +59,16 @@ describe "Simple Dataset operations" do
     @ds.join(:items___b, :id=>:id).select_all(:items).all.should == [{:id=>1, :number=>10}]
   end
 
+  specify "should handle LATERAL subqueries correctly" do
+    @ds << {:number=>20}
+    @ds.from(:items___i, @ds.where(:items__number=>:i__number).lateral).select_order_map([:i__number___n, :t1__number]).should == [[10, 10], [20, 20]]
+    @ds.from(:items___i).cross_join(@ds.where(:items__number=>:i__number).lateral).select_order_map([:i__number___n, :t1__number]).should == [[10, 10], [20, 20]]
+    @ds.from(:items___i).join(@ds.where(:items__number=>:i__number).lateral, 1=>1).select_order_map([:i__number___n, :t1__number]).should == [[10, 10], [20, 20]]
+    @ds.from(:items___i).join(@ds.where(:items__number=>:i__number).lateral, 1=>0).select_order_map([:i__number___n, :t1__number]).should == []
+    @ds.from(:items___i).left_join(@ds.from(:items___i2).where(:i2__number=>:i__number).lateral, 1=>1).select_order_map([:i__number___n, :t1__number]).should == [[10, 10], [20, 20]]
+    @ds.from(:items___i).left_join(@ds.from(:items___i2).where(:i2__number=>:i__number).lateral, 1=>0).select_order_map([:i__number___n, :t1__number]).should == [[10, nil], [20, nil]]
+  end if DB.dataset.supports_lateral_subqueries?
+
   specify "should correctly deal with qualified columns and subselects" do
     @ds.from_self(:alias=>:a).select(:a__id, Sequel.qualify(:a, :number)).all.should == [{:id=>1, :number=>10}]
     @ds.join(@ds.as(:a), :id=>:id).select(:a__id, Sequel.qualify(:a, :number)).all.should == [{:id=>1, :number=>10}]
@@ -568,9 +578,9 @@ if DB.dataset.supports_cte?
     end
     
     cspecify "should give correct results for recursive WITH", :db2 do
-      ds = @db[:t].select(:i___id, :pi___parent_id).with_recursive(:t, @ds.filter(:parent_id=>nil), @ds.join(:t, :i=>:parent_id).select(:i1__id, :i1__parent_id), :args=>[:i, :pi])
+      ds = @db[:t].select(:i___id, :pi___parent_id).with_recursive(:t, @ds.filter(:parent_id=>nil), @ds.join(:t, :i=>:parent_id).select(:i1__id, :i1__parent_id), :args=>[:i, :pi]).order(:id)
       ds.all.should == [{:parent_id=>nil, :id=>1}, {:parent_id=>nil, :id=>2}, {:parent_id=>1, :id=>3}, {:parent_id=>1, :id=>4}, {:parent_id=>3, :id=>5}, {:parent_id=>5, :id=>6}]
-      ps = @db[:t].select(:i___id, :pi___parent_id).with_recursive(:t, @ds.filter(:parent_id=>:$n), @ds.join(:t, :i=>:parent_id).filter(:t__i=>:parent_id).select(:i1__id, :i1__parent_id), :args=>[:i, :pi]).prepare(:select, :cte_sel)
+      ps = @db[:t].select(:i___id, :pi___parent_id).with_recursive(:t, @ds.filter(:parent_id=>:$n), @ds.join(:t, :i=>:parent_id).filter(:t__i=>:parent_id).select(:i1__id, :i1__parent_id), :args=>[:i, :pi]).order(:id).prepare(:select, :cte_sel)
       ps.call(:n=>1).should == [{:id=>3, :parent_id=>1}, {:id=>4, :parent_id=>1}, {:id=>5, :parent_id=>3}, {:id=>6, :parent_id=>5}]
       ps.call(:n=>3).should == [{:id=>5, :parent_id=>3}, {:id=>6, :parent_id=>5}]
       ps.call(:n=>5).should == [{:id=>6, :parent_id=>5}]

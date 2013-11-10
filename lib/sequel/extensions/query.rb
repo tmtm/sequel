@@ -5,7 +5,7 @@
 # You can load this extension into specific datasets:
 #
 #   ds = DB[:table]
-#   ds.extension(:query)
+#   ds = ds.extension(:query)
 #
 # Or you can load it into all of a database's datasets, which
 # is probably the desired behavior if you are using this extension:
@@ -25,6 +25,8 @@ module Sequel
   end
 
   module DatasetQuery
+    Dataset.def_mutation_method(:query, :module=>self)
+
     # Translates a query block into a dataset. Query blocks are an
     # alternative to Sequel's usual method chaining, by using
     # instance_eval with a proxy object:

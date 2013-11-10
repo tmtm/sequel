@@ -1001,6 +1001,14 @@ module Sequel
         @changed_columns ||= []
       end
   
+      # Similar to Model#dup, but copies frozen status to returned object
+      # if current object is frozen.
+      def clone
+        o = dup
+        o.freeze if frozen?
+        o
+      end
+
       # Deletes and returns +self+.  Does not run destroy hooks.
       # Look into using +destroy+ instead.
       #
@@ -1026,6 +1034,18 @@ module Sequel
         checked_save_failure(opts){checked_transaction(opts){_destroy(opts)}}
       end
 
+      # Produce a shallow copy of the object, similar to Object#dup.
+      def dup
+        s = self
+        super.instance_eval do
+          @values = s.values.dup
+          @changed_columns = s.changed_columns.dup
+          @errors = s.errors.dup
+          @this = s.this.dup if !new? && model.primary_key
+          self
+        end
+      end
+  
       # Iterates through all of the current values using each.
       #
       #  Album[1].each{|k, v| puts "#{k} => #{v}"}
@@ -1396,12 +1416,6 @@ module Sequel
         self
       end
 
-      # REMOVE41
-      def set_values(hash)
-        Sequel::Deprecation.deprecate('Model#set_values is deprecreated and will be removed in Sequel 4.1.  Please use _refresh_set_values or _save_set_values or set the values directly.')
-        @values = hash
-      end
-      
       # Clear the setter_methods cache when a method is added
       def singleton_method_added(meth)
         @singleton_setter_added = true if meth.to_s =~ SETTER_METHOD_REGEXP

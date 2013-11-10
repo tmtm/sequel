@@ -40,6 +40,13 @@ module Sequel
     def eql?(o)
       self == o
     end
+
+    # Similar to #clone, but returns an unfrozen clone if the receiver is frozen.
+    def dup
+      o = clone
+      o.opts.delete(:frozen)
+      o
+    end
     
     # Yield a dataset for each server in the connection pool that is tied to that server.
     # Intended for use in sharded environments where all servers need to be modified
@@ -57,6 +64,17 @@ module Sequel
     #   ds.escape_like("foo\\%_") # 'foo\\\%\_'
     def escape_like(string)
       string.gsub(/[\\%_]/){|m| "\\#{m}"}
+    end
+
+    # Sets the frozen flag on the dataset, so you can't modify it. Returns the receiver.
+    def freeze
+      @opts[:frozen] = true
+      self
+    end
+
+    # Whether the object is frozen.
+    def frozen?
+      @opts[:frozen]
     end
    
     # Alias of +first_source_alias+
@@ -142,9 +160,7 @@ module Sequel
     # Returns a string representation of the dataset including the class name 
     # and the corresponding SQL select statement.
     def inspect
-      c = self.class
-      c = c.superclass while c.name.nil? || c.name == ''
-      "#<#{c.name}: #{sql.inspect}>"
+      "#<#{visible_class_name}: #{sql.inspect}>"
     end
     
     # The alias to use for the row_number column, used when emulating OFFSET
@@ -206,6 +222,15 @@ module Sequel
       else
         table_alias
       end
+    end
+
+    private
+
+    # Return the class name for this dataset, but skip anonymous classes
+    def visible_class_name
+      c = self.class
+      c = c.superclass while c.name.nil? || c.name == ''
+      c.name
     end
   end
 end

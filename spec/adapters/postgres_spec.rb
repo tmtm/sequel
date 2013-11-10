@@ -60,6 +60,18 @@ describe "PostgreSQL", '#create_table' do
       @db.create_table(:temp_unlogged_dolls, :temp => true, :unlogged => true){text :name}
     end.should raise_error(Sequel::Error, "can't provide both :temp and :unlogged to create_table")
   end
+
+  specify "should support pg_loose_count extension" do
+    @db.extension :pg_loose_count
+    @db.create_table(:tmp_dolls){text :name}
+    @db.loose_count(:tmp_dolls).should be_a_kind_of(Integer)
+    @db.loose_count(:tmp_dolls).should == 0
+    @db.loose_count(:public__tmp_dolls).should == 0
+    @db[:tmp_dolls].insert('a')
+    @db << 'VACUUM ANALYZE tmp_dolls'
+    @db.loose_count(:tmp_dolls).should == 1
+    @db.loose_count(:public__tmp_dolls).should == 1
+  end
 end
 
 describe "PostgreSQL views" do
@@ -1409,6 +1421,21 @@ if DB.adapter_scheme == :postgres
       check_sqls do
         @db.sqls.length.should == 15
       end
+    end
+
+    specify "should respect the :cursor_name option" do
+      one_rows = []
+      two_rows = []
+      @ds.order(:x).use_cursor(:cursor_name => 'cursor_one').each do |one|
+        one_rows << one
+        if one[:x] % 1000 == 500 
+          two_rows = []
+          @ds.order(:x).use_cursor(:cursor_name => 'cursor_two').each do |two|
+            two_rows << two
+          end
+        end
+      end
+      one_rows.should == two_rows
     end
 
     specify "should handle returning inside block" do
@@ -3135,3 +3162,46 @@ describe 'PostgreSQL row-valued/composite types' do
     end
   end
 end
+
+describe 'pg_static_cache_updater extension' do
+  before(:all) do
+    @db = DB
+    @db.extension :pg_static_cache_updater
+    @db.drop_function(@db.default_static_cache_update_name, :cascade=>true, :if_exists=>true)
+    @db.create_static_cache_update_function
+
+    @db.create_table!(:things) do
+      primary_key :id
+      String :name
+    end
+    @Thing = Class.new(Sequel::Model(:things))
+    @Thing.plugin :static_cache
+    @db.create_static_cache_update_trigger(:things)
+  end
+  after(:all) do
+    @db.drop_table(:things)
+    @db.drop_function(@db.default_static_cache_update_name)
+  end
+
+  specify "should reload model static cache when underlying table changes" do
+    @Thing.all.should == []
+    q = Queue.new
+    q1 = Queue.new
+
+    @db.listen_for_static_cache_updates(@Thing, :timeout=>0, :loop=>proc{q.push(nil); q1.pop.call})
+    q.pop
+    q1.push(proc{@db[:things].insert(1, 'A')})
+    q.pop
+    @Thing.all.should == [@Thing.load(:id=>1, :name=>'A')]
+
+    q1.push(proc{@db[:things].update(:name=>'B')})
+    q.pop
+    @Thing.all.should == [@Thing.load(:id=>1, :name=>'B')]
+
+    q1.push(proc{@db[:things].delete})
+    q.pop
+    @Thing.all.should == []
+
+    q1.push(proc{throw :stop})
+  end
+end if DB.adapter_scheme == :postgres && SEQUEL_POSTGRES_USES_PG && DB.server_version >= 90000

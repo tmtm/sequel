@@ -9,12 +9,11 @@ module Sequel
     
     # Action methods defined by Sequel that execute code on the database.
     ACTION_METHODS = (<<-METHS).split.map{|x| x.to_sym}
-      << [] []= all avg count columns columns! delete each
-      empty? fetch_rows first first! get import insert insert_multiple interval last
+      << [] all avg count columns columns! delete each
+      empty? fetch_rows first first! get import insert interval last
       map max min multi_insert paged_each range select_hash select_hash_groups select_map select_order_map
-      set single_record single_value sum to_csv to_hash to_hash_groups truncate update
+      single_record single_value sum to_hash to_hash_groups truncate update
     METHS
-    # REMOVE40 []= insert_multiple set to_csv
 
     # Inserts the given argument into the database.  Returns self so it
     # can be used safely when chaining:
@@ -589,7 +588,7 @@ module Sequel
     # Returns nil if dataset is empty.  Users should generally use
     # +get+ instead of this method.
     def single_value
-      if r = naked.ungraphed.single_record
+      if r = ungraphed.naked.single_record
         r.values.first
       end
     end
@@ -761,7 +760,7 @@ module Sequel
     
     # Internals of +select_map+ and +select_order_map+
     def _select_map(column, order, &block)
-      ds = naked.ungraphed
+      ds = ungraphed.naked
       columns = Array(column)
       virtual_row_columns(columns, block)
       select_cols = order ? columns.map{|c| c.is_a?(SQL::OrderedExpression) ? c.expression : c} : columns

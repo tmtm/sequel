@@ -470,6 +470,11 @@ module Sequel
         true
       end
 
+      # PostgreSQL supports partial indexes.
+      def supports_partial_indexes?
+        true
+      end
+
       # PostgreSQL supports prepared transactions (two-phase commit) if
       # max_prepared_transactions is greater than 0.
       def supports_prepared_transactions?
@@ -1238,6 +1243,11 @@ module Sequel
         true
       end
 
+      # PostgreSQL 9.3rc1+ supports lateral subqueries
+      def supports_lateral_subqueries?
+        server_version >= 90300
+      end
+      
       # PostgreSQL supports modifying joined datasets
       def supports_modifying_joins?
         true
