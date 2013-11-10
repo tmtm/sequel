@@ -46,7 +46,7 @@ module Sequel
 
       # Return foreign key information using the system views, including
       # :name, :on_delete, and :on_update entries in the hashes.
-      def foreign_key_list(table, opts={})
+      def foreign_key_list(table, opts=OPTS)
         m = output_identifier_meth
         im = input_identifier_meth
         schema, table = schema_and_table(table)
@@ -86,7 +86,7 @@ module Sequel
       end
 
       # Use the system tables to get index information
-      def indexes(table, opts={})
+      def indexes(table, opts=OPTS)
         m = output_identifier_meth
         im = input_identifier_meth
         indexes = {}
@@ -136,13 +136,13 @@ module Sequel
 
       # Microsoft SQL Server supports using the INFORMATION_SCHEMA to get
       # information on tables.
-      def tables(opts={})
+      def tables(opts=OPTS)
         information_schema_tables('BASE TABLE', opts)
       end
 
       # Microsoft SQL Server supports using the INFORMATION_SCHEMA to get
       # information on views.
-      def views(opts={})
+      def views(opts=OPTS)
         information_schema_tables('VIEW', opts)
       end
       
@@ -220,7 +220,7 @@ module Sequel
 
       # Commit the active transaction on the connection, does not commit/release
       # savepoints.
-      def commit_transaction(conn, opts={})
+      def commit_transaction(conn, opts=OPTS)
         log_connection_execute(conn, commit_transaction_sql) unless _trans(conn)[:savepoint_level] > 1
       end
 
@@ -288,7 +288,7 @@ module Sequel
         m = output_identifier_meth
         metadata_dataset.from(:information_schema__tables___t).
           select(:table_name).
-          filter(:table_type=>type, :table_schema=>(opts[:schema]||_default_schema||'dbo').to_s).
+          filter(:table_type=>type, :table_schema=>(opts[:schema]||'dbo').to_s).
           map{|x| m.call(x[:table_name])}
       end
 
@@ -350,7 +350,7 @@ module Sequel
               :table_schema => :table_schema, :table_name => :table_name).
          select(:column_name___column, :data_type___db_type, :character_maximum_length___max_chars, :column_default___default, :is_nullable___allow_null, :numeric_precision___column_size, :numeric_scale___scale).
          filter(:c__table_name=>tn)
-        if schema = opts[:schema] || _default_schema
+        if schema = opts[:schema]
           ds.filter!(:c__table_schema=>schema)
         end
         ds.map do |row|
@@ -524,7 +524,7 @@ module Sequel
       end
       
       # MSSQL uses the CONTAINS keyword for full text search
-      def full_text_search(cols, terms, opts = {})
+      def full_text_search(cols, terms, opts = OPTS)
         terms = "\"#{terms.join('" OR "')}\"" if terms.is_a?(Array)
         filter("CONTAINS (?, ?)", cols, terms)
       end
@@ -660,7 +660,7 @@ module Sequel
       # dataset.  If OUTPUT is already set, use existing returning values.  If OUTPUT
       # is only set to return a single columns, return an array of just that column.
       # Otherwise, return an array of hashes.
-      def _import(columns, values, opts={})
+      def _import(columns, values, opts=OPTS)
         if opts[:return] == :primary_key && !@opts[:output]
           output(nil, [SQL::QualifiedIdentifier.new(:inserted, first_primary_key)])._import(columns, values, opts)
         elsif @opts[:output]

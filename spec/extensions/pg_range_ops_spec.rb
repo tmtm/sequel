@@ -1,5 +1,7 @@
 require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
 
+Sequel.extension :pg_array, :pg_range, :pg_range_ops
+
 describe "Sequel::Postgres::RangeOp" do
   before do
     @ds = Sequel.connect('mock://postgres', :quote_identifiers=>false).dataset
@@ -36,11 +38,6 @@ describe "Sequel::Postgres::RangeOp" do
     @ds.literal(@h.ends_before(@h)).should == "(h &< h)"
     @ds.literal(@h.starts_after(@h)).should == "(h &> h)"
     @ds.literal(@h.adjacent_to(@h)).should == "(h -|- h)"
-  end
-
-  qspecify "should define methods for the deprecated PostgreSQL range operators" do
-    @ds.literal(@h.starts_before(@h)).should == "(h &< h)"
-    @ds.literal(@h.ends_after(@h)).should == "(h &> h)"
   end
 
   it "should define methods for all of the PostgreSQL range functions" do

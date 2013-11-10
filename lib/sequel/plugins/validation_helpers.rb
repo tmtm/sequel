@@ -32,9 +32,7 @@ module Sequel
     # :allow_nil :: Whether to skip the validation if the value is nil.
     # :message :: The message to use.  Can be a string which is used directly, or a
     #             proc which is called.  If the validation method takes a argument before the array of attributes,
-    #             that argument is passed as an argument to the proc.  The exception is the
-    #             validates_not_string method, which doesn't take an argument, but passes
-    #             the schema type symbol as the argument to the proc.
+    #             that argument is passed as an argument to the proc.
     #
     # The default validation options for all models can be modified by
     # changing the values of the Sequel::Plugins::ValidationHelpers::DEFAULT_OPTIONS hash.  You
@@ -84,7 +82,6 @@ module Sequel
         :max_length=>{:message=>lambda{|max| "is longer than #{max} characters"}, :nil_message=>lambda{"is not present"}},
         :min_length=>{:message=>lambda{|min| "is shorter than #{min} characters"}},
         :not_null=>{:message=>lambda{"is not present"}},
-        :not_string=>{:message=>lambda{|type| type ? "is not a valid #{type}" : "is a string"}},
         :numeric=>{:message=>lambda{"is not a number"}},
         :type=>{:message=>lambda{|klass| klass.is_a?(Array) ? "is not a valid #{klass.join(" or ").downcase}" : "is not a valid #{klass.to_s.downcase}"}},
         :presence=>{:message=>lambda{"is not present"}},
@@ -93,22 +90,22 @@ module Sequel
 
       module InstanceMethods 
         # Check that the attribute values are the given exact length.
-        def validates_exact_length(exact, atts, opts={})
+        def validates_exact_length(exact, atts, opts=OPTS)
           validatable_attributes_for_type(:exact_length, atts, opts){|a,v,m| validation_error_message(m, exact) if v.nil? || v.length != exact}
         end
 
         # Check the string representation of the attribute value(s) against the regular expression with.
-        def validates_format(with, atts, opts={})
+        def validates_format(with, atts, opts=OPTS)
           validatable_attributes_for_type(:format, atts, opts){|a,v,m| validation_error_message(m, with) unless v.to_s =~ with}
         end
     
         # Check attribute value(s) is included in the given set.
-        def validates_includes(set, atts, opts={})
+        def validates_includes(set, atts, opts=OPTS)
           validatable_attributes_for_type(:includes, atts, opts){|a,v,m| validation_error_message(m, set) unless set.send(set.respond_to?(:cover?) ? :cover? : :include?, v)}
         end
     
         # Check attribute value(s) string representation is a valid integer.
-        def validates_integer(atts, opts={})
+        def validates_integer(atts, opts=OPTS)
           validatable_attributes_for_type(:integer, atts, opts) do |a,v,m|
             begin
               Kernel.Integer(v.to_s)
@@ -120,7 +117,7 @@ module Sequel
         end
 
         # Check that the attribute values length is in the specified range.
-        def validates_length_range(range, atts, opts={})
+        def validates_length_range(range, atts, opts=OPTS)
           validatable_attributes_for_type(:length_range, atts, opts){|a,v,m| validation_error_message(m, range) if v.nil? || !range.send(range.respond_to?(:cover?) ? :cover? : :include?, v.length)}
         end
     
@@ -128,33 +125,22 @@ module Sequel
         #
         # Accepts a :nil_message option that is the error message to use when the
         # value is nil instead of being too long.
-        def validates_max_length(max, atts, opts={})
+        def validates_max_length(max, atts, opts=OPTS)
           validatable_attributes_for_type(:max_length, atts, opts){|a,v,m| v ? validation_error_message(m, max) : validation_error_message(opts[:nil_message] || DEFAULT_OPTIONS[:max_length][:nil_message]) if v.nil? || v.length > max}
         end
 
         # Check that the attribute values are not shorter than the given min length.
-        def validates_min_length(min, atts, opts={})
+        def validates_min_length(min, atts, opts=OPTS)
           validatable_attributes_for_type(:min_length, atts, opts){|a,v,m| validation_error_message(m, min) if v.nil? || v.length < min}
         end
 
         # Check attribute value(s) are not NULL/nil.
-        def validates_not_null(atts, opts={})
+        def validates_not_null(atts, opts=OPTS)
           validatable_attributes_for_type(:not_null, atts, opts){|a,v,m| validation_error_message(m) if v.nil?}
         end
         
-        # Check that the attribute value(s) is not a string.  This is generally useful
-        # in conjunction with raise_on_typecast_failure = false, where you are
-        # passing in string values for non-string attributes (such as numbers and dates).
-        # If typecasting fails (invalid number or date), the value of the attribute will
-        # be a string in an invalid format, and if typecasting succeeds, the value will
-        # not be a string.
-        def validates_not_string(atts, opts={})
-          Sequel::Deprecation.deprecate('validates_not_string', "Please switch to validates_schema_types")
-          validatable_attributes_for_type(:not_string, atts, opts){|a,v,m| validation_error_message(m, (db_schema[a]||{})[:type]) if v.is_a?(String)}
-        end
-
         # Check attribute value(s) string representation is a valid float.
-        def validates_numeric(atts, opts={})
+        def validates_numeric(atts, opts=OPTS)
           validatable_attributes_for_type(:numeric, atts, opts) do |a,v,m|
             begin
               Kernel.Float(v.to_s)
@@ -168,7 +154,7 @@ module Sequel
         # Validates for all of the model columns (or just the given columns)
         # that the column value is an instance of the expected class based on
         # the column's schema type.
-        def validates_schema_types(atts=keys, opts={})
+        def validates_schema_types(atts=keys, opts=OPTS)
           Array(atts).each do |k|
             if type = schema_type_class(k)
               validates_type(type, k, {:allow_nil=>true}.merge(opts))
@@ -178,13 +164,9 @@ module Sequel
 
         # Check if value is an instance of a class.  If +klass+ is an array,
         # the value must be an instance of one of the classes in the array.
-        def validates_type(klass, atts, opts={})
+        def validates_type(klass, atts, opts=OPTS)
           klass = klass.to_s.constantize if klass.is_a?(String) || klass.is_a?(Symbol)
           validatable_attributes_for_type(:type, atts, opts) do |a,v,m|
-            if v.nil?
-              Sequel::Deprecation.deprecate('validates_type will no longer allow nil values by default in Sequel 4.  Use the :allow_nil=>true option to allow nil values.')
-              next
-            end
             if klass.is_a?(Array) ? !klass.any?{|kls| v.is_a?(kls)} : !v.is_a?(klass)
               validation_error_message(m, klass)
             end
@@ -192,7 +174,7 @@ module Sequel
         end
 
         # Check attribute value(s) is not considered blank by the database, but allow false values.
-        def validates_presence(atts, opts={})
+        def validates_presence(atts, opts=OPTS)
           validatable_attributes_for_type(:presence, atts, opts){|a,v,m| validation_error_message(m) if model.db.send(:blank_object?, v) && v != false}
         end
         

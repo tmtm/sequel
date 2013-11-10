@@ -226,12 +226,6 @@ describe "Sequel.extension" do
   end
 end
 
-describe "Database#connect" do
-  qspecify "should raise Sequel::NotImplemented" do
-    proc {Sequel::Database.new.connect(:default)}.should raise_error(Sequel::NotImplemented)
-  end
-end
-
 describe "Database#log_info" do
   before do
     @o = Object.new
@@ -416,9 +410,9 @@ describe "Database#dataset_class" do
   end
 
   specify "should have getter return the class to use to create datasets" do
-    @db.dataset_class.should == Sequel::Dataset
+    [@db.dataset_class, @db.dataset_class.superclass].should include(Sequel::Dataset)
     @db.dataset_class = @dsc
-    @db.dataset_class.should == @dsc
+    [@db.dataset_class, @db.dataset_class.superclass].should include(@dsc)
   end
 end
   
@@ -501,36 +495,6 @@ describe "Database#valid_connection?" do
       def c.execute(*) raise Sequel::DatabaseError, "error" end
       db.valid_connection?(c)
     end.should be_false
-  end
-end
-
-describe "Database#execute" do
-  qspecify "should raise Sequel::NotImplemented" do
-    proc {Sequel::Database.new.execute('blah blah')}.should raise_error(Sequel::NotImplemented)
-  end
-end
-
-describe "Database#tables" do
-  qspecify "should raise Sequel::NotImplemented" do
-    proc {Sequel::Database.new.tables}.should raise_error(Sequel::NotImplemented)
-  end
-end
-
-describe "Database#views" do
-  qspecify "should raise Sequel::NotImplemented" do
-    proc {Sequel::Database.new.views}.should raise_error(Sequel::NotImplemented)
-  end
-end
-
-describe "Database#indexes" do
-  qspecify "should raise Sequel::NotImplemented" do
-    proc {Sequel::Database.new.indexes(:table)}.should raise_error(Sequel::NotImplemented)
-  end
-end
-
-describe "Database#foreign_key_list" do
-  qspecify "should raise Sequel::NotImplemented" do
-    proc {Sequel::Database.new.foreign_key_list(:table)}.should raise_error(Sequel::NotImplemented)
   end
 end
 
@@ -655,13 +619,6 @@ shared_examples_for "Database#transaction" do
                        'BEGIN', 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE', 'DROP TABLE serializable', 'COMMIT']
   end
   
-  qspecify "should support :disconnect=>:retry option for automatically retrying on disconnect" do
-    a = []
-    @db.transaction(:disconnect=>:retry){a << 1; raise Sequel::DatabaseDisconnectError if a.length < 2}
-    @db.sqls.should == ['BEGIN', 'ROLLBACK', 'BEGIN', 'COMMIT']
-    a.should == [1, 1]
-  end
-  
   specify "should support :retry_on option for automatically retrying transactions" do
     a = []
     @db.transaction(:retry_on=>Sequel::DatabaseDisconnectError){a << 1; raise Sequel::DatabaseDisconnectError if a.length < 2}
@@ -704,12 +661,7 @@ shared_examples_for "Database#transaction" do
     a.should == [1] * 100
   end
   
-  qspecify "should raise an error if using :disconnect=>:retry and :retry_on together" do
-    proc{@db.transaction(:disconnect=>:retry, :retry_on=>Sequel::ConstraintViolation){}}.should raise_error(Sequel::Error)
-    @db.sqls.should == []
-  end
-  
-  specify "should raise an error if attempting to use :disconnect=>:retry or :retry_on inside another transaction" do
+  specify "should raise an error if attempting to use :retry_on inside another transaction" do
     proc{@db.transaction{@db.transaction(:retry_on=>Sequel::ConstraintViolation){}}}.should raise_error(Sequel::Error)
     @db.sqls.should == ['BEGIN', 'ROLLBACK']
   end
@@ -1522,9 +1474,9 @@ describe "Database#get" do
     @db.sqls.should == ['SELECT version(a) AS version LIMIT 1']
   end
 
-  qspecify "should work when an alias cannot be determined" do
+  specify "should work when an alias cannot be determined" do
     @db.get(1).should == 1
-    @db.sqls.should == ['SELECT 1 LIMIT 1']
+    @db.sqls.should == ['SELECT 1 AS v LIMIT 1']
   end
 end
 
@@ -2041,9 +1993,9 @@ describe "Database#typecast_value" do
     end
   end
 
-  qspecify "should typecast hash and array values to String" do
+  specify "should raise errors when typecasting hash and array values to String" do
     [[], {}].each do |i|
-      @db.typecast_value(:string, i).should be_an_instance_of(String)
+      proc{@db.typecast_value(:string, i)}.should raise_error(Sequel::InvalidValue)
     end
   end
 
@@ -2126,6 +2078,54 @@ describe "Database#supports_schema_parsing?" do
     db = Sequel::Database.new
     def db.schema_parse_table(*) end
     db.supports_schema_parsing?.should == true
+  end
+end
+
+describe "Database#supports_foreign_key_parsing?" do
+  specify "should be false by default" do
+    Sequel::Database.new.supports_foreign_key_parsing?.should == false
+  end
+
+  specify "should be true if the database implements foreign_key_list" do
+    db = Sequel::Database.new
+    def db.foreign_key_list(*) end
+    db.supports_foreign_key_parsing?.should == true
+  end
+end
+
+describe "Database#supports_index_parsing?" do
+  specify "should be false by default" do
+    Sequel::Database.new.supports_index_parsing?.should == false
+  end
+
+  specify "should be true if the database implements indexes" do
+    db = Sequel::Database.new
+    def db.indexes(*) end
+    db.supports_index_parsing?.should == true
+  end
+end
+
+describe "Database#supports_table_listing?" do
+  specify "should be false by default" do
+    Sequel::Database.new.supports_table_listing?.should == false
+  end
+
+  specify "should be true if the database implements tables" do
+    db = Sequel::Database.new
+    def db.tables(*) end
+    db.supports_table_listing?.should == true
+  end
+end
+
+describe "Database#supports_view_listing?" do
+  specify "should be false by default" do
+    Sequel::Database.new.supports_view_listing?.should == false
+  end
+
+  specify "should be true if the database implements views" do
+    db = Sequel::Database.new
+    def db.views(*) end
+    db.supports_view_listing?.should == true
   end
 end
 

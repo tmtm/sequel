@@ -619,6 +619,12 @@ describe "Superclass validations" do
     o.valid?.should be_true
   end
   
+  specify "should have skip_superclass_validations? return whether superclass validations were skipped" do
+    @c2.skip_superclass_validations?.should == nil
+    @c2.skip_superclass_validations
+    @c2.skip_superclass_validations?.should == true
+  end
+
   specify "should be skipped if skip_superclass_validations is called" do
     @c2.skip_superclass_validations
 
@@ -761,41 +767,6 @@ describe Sequel::Model, "Validations" do
     @person.last_name   = "1234567890123456789012345678901"
     @person.initials    = "LC"
     @person.middle_name = "Will"
-    @person.should be_valid
-  end
-  
-  qspecify "should validate that a column doesn't have a string value" do
-    p = model_class.call Sequel::Model do
-      columns :age, :price, :confirmed
-      self.raise_on_typecast_failure = false
-      validates_not_string :age
-      validates_not_string :confirmed
-      validates_not_string :price, :message=>'is not valid'
-      @db_schema = {:age=>{:type=>:integer}}
-    end
-    
-    @person = p.new
-    @person.should be_valid
-
-    @person.confirmed = 't'
-    @person.should_not be_valid
-    @person.errors.full_messages.should == ['confirmed is a string']
-    @person.confirmed = true
-    @person.should be_valid
-
-    @person.age = 'a'
-    @person.should_not be_valid
-    @person.errors.full_messages.should == ['age is not a valid integer']
-    @person.db_schema[:age][:type] = :datetime
-    @person.should_not be_valid
-    @person.errors.full_messages.should == ['age is not a valid datetime']
-    @person.age = 20
-    @person.should be_valid
-
-    @person.price = 'a'
-    @person.should_not be_valid
-    @person.errors.full_messages.should == ['price is not valid']
-    @person.price = 20
     @person.should be_valid
   end
   
@@ -1026,26 +997,26 @@ describe "Model#save" do
       end
     end
     @m = @c.load(:id => 4, :x=>6)
-    MODEL_DB.reset
+    DB.reset
   end
 
   specify "should save only if validations pass" do
     @m.raise_on_save_failure = false
     @m.should_not be_valid
     @m.save
-    MODEL_DB.sqls.should be_empty
+    DB.sqls.should be_empty
     
     @m.x = 7
     @m.should be_valid
     @m.save.should_not be_false
-    MODEL_DB.sqls.should == ['UPDATE people SET x = 7 WHERE (id = 4)']
+    DB.sqls.should == ['UPDATE people SET x = 7 WHERE (id = 4)']
   end
   
   specify "should skip validations if the :validate=>false option is used" do
     @m.raise_on_save_failure = false
     @m.should_not be_valid
     @m.save(:validate=>false)
-    MODEL_DB.sqls.should == ['UPDATE people SET x = 6 WHERE (id = 4)']
+    DB.sqls.should == ['UPDATE people SET x = 6 WHERE (id = 4)']
   end
     
   specify "should raise error if validations fail and raise_on_save_faiure is true" do

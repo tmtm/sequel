@@ -40,8 +40,6 @@ module Sequel
       when 1
         case vals = values.at(0)
         when Hash
-          vals = @opts[:defaults].merge(vals) if @opts[:defaults]
-          vals = vals.merge(@opts[:overrides]) if @opts[:overrides]
           values = []
           vals.each do |k,v| 
             columns << k
@@ -163,7 +161,7 @@ module Sequel
     #
     # Raises an +Error+ if the dataset is grouped or includes more
     # than one table.
-    def update_sql(values = {})
+    def update_sql(values = OPTS)
       return static_sql(opts[:sql]) if opts[:sql]
       check_modification_allowed!
       clone(:values=>values)._update_sql
@@ -202,6 +200,7 @@ module Sequel
     CASE_THEN = " THEN ".freeze
     CASE_WHEN = " WHEN ".freeze
     CAST_OPEN = 'CAST('.freeze
+    COLON = ':'.freeze
     COLUMN_REF_RE1 = Sequel::COLUMN_REF_RE1
     COLUMN_REF_RE2 = Sequel::COLUMN_REF_RE2
     COLUMN_REF_RE3 = Sequel::COLUMN_REF_RE3
@@ -284,80 +283,6 @@ module Sequel
     VALUES = " VALUES ".freeze
     V190 = '1.9.0'.freeze
     WHERE = " WHERE ".freeze
-
-    PUBLIC_APPEND_METHODS = (<<-END).split.map{|x| x.to_sym}
-      literal
-      aliased_expression_sql
-      array_sql
-      boolean_constant_sql
-      case_expression_sql
-      cast_sql
-      column_all_sql
-      complex_expression_sql
-      constant_sql
-      delayed_evaluation_sql
-      function_sql
-      join_clause_sql
-      join_on_clause_sql
-      join_using_clause_sql
-      negative_boolean_constant_sql
-      ordered_expression_sql
-      placeholder_literal_string_sql
-      qualified_identifier_sql
-      quote_identifier
-      quote_schema_table
-      quoted_identifier
-      subscript_sql
-      window_sql
-      window_function_sql
-    END
-    PRIVATE_APPEND_METHODS = (<<-END).split.map{|x| x.to_sym}
-      as_sql
-      column_list
-      compound_dataset_sql
-      expression_list
-      literal_array
-      literal_blob
-      literal_dataset
-      literal_expression
-      literal_hash
-      literal_other
-      literal_string
-      literal_symbol
-      source_list
-      subselect_sql
-      table_ref
-    END
-
-    # For each of the methods in the given array, define a method with
-    # that name that returns a string with the SQL fragment that the
-    # related *_append method would add.
-    #
-    # Do not call this method with untrusted input, as that can result in
-    # arbitrary code execution.
-    def self.def_append_methods(meths)
-      Sequel::Deprecation.deprecate('Dataset.def_append_methods', "There is no replacement planned")
-      meths.each do |meth|
-        class_eval(<<-END, __FILE__, __LINE__ + 1)
-          def #{meth}(*args, &block)
-            s = ''
-            #{meth}_append(s, *args, &block)
-            s
-          end
-        END
-      end
-    end
-    (PUBLIC_APPEND_METHODS + PRIVATE_APPEND_METHODS - [:literal, :quote_identifier, :quote_schema_table]).each do |meth|
-      class_eval(<<-END, __FILE__, __LINE__ + 1)
-        def #{meth}(*args, &block)
-          Sequel::Deprecation.deprecate('Dataset##{meth}', "Please switch to Dataset##{meth}_append")
-          s = ''
-          #{meth}_append(s, *args, &block)
-          s
-        end
-      END
-    end
-    private(*PRIVATE_APPEND_METHODS)
 
     [:literal, :quote_identifier, :quote_schema_table].each do |meth|
       class_eval(<<-END, __FILE__, __LINE__ + 1)
@@ -622,17 +547,18 @@ module Sequel
           literal_append(sql, args[i]) unless i == len
         end
         unless str.length == args.length || str.length == args.length + 1
-          Sequel::Deprecation.deprecate("Using a mismatched number of placeholders (#{str.length}) and placeholder arguments (#{args.length}) is deprecated and will raise an Error in Sequel 4.")
+          raise Error, "Mismatched number of placeholders (#{str.length}) and placeholder arguments (#{args.length}) when using placeholder array"
         end
       else
         i = -1
+        match_len = args.length - 1
         loop do
           previous, q, str = str.partition(QUESTION_MARK)
           sql << previous
           literal_append(sql, args.at(i+=1)) unless q.empty?
           if str.empty?
-            unless i + 1 == args.length
-              Sequel::Deprecation.deprecate("Using a mismatched number of placeholders (#{i+1}) and placeholder arguments (#{args.length}) is deprecated and will raise an Error in Sequel 4.")
+            unless i == match_len
+              raise Error, "Mismatched number of placeholders (#{i+1}) and placeholder arguments (#{args.length}) when using placeholder array"
             end
             break
           end
@@ -693,7 +619,7 @@ module Sequel
     # Note that this function does not handle tables with more than one
     # level of qualification (e.g. database.schema.table on Microsoft
     # SQL Server).
-    def schema_and_table(table_name, sch=(db._default_schema if db))
+    def schema_and_table(table_name, sch=nil)
       sch = sch.to_s if sch
       case table_name
       when Symbol
@@ -730,7 +656,15 @@ module Sequel
     def subscript_sql_append(sql, s)
       literal_append(sql, s.f)
       sql << BRACKET_OPEN
-      expression_list_append(sql, s.sub)
+      if s.sub.length == 1 && (range = s.sub.first).is_a?(Range)
+        literal_append(sql, range.begin)
+        sql << COLON
+        e = range.end
+        e -= 1 if range.exclude_end? && e.is_a?(Integer)
+        literal_append(sql, e)
+      else
+        expression_list_append(sql, s.sub)
+      end
       sql << BRACKET_CLOSE
     end
 
@@ -949,14 +883,10 @@ module Sequel
       end
     end
 
-    # An expression for how to handle an empty array lookup
+    # An expression for how to handle an empty array lookup.
     def empty_array_value(op, cols)
-      if Sequel.empty_array_handle_nulls
-        c = Array(cols)
-        SQL::BooleanExpression.from_value_pairs(c.zip(c), :AND, op == :IN)
-      else
-        {1 => ((op == :IN) ? 0 : 1)}
-      end
+      c = Array(cols)
+      SQL::BooleanExpression.from_value_pairs(c.zip(c), :AND, op == :IN)
     end
     
     # Format the timestamp based on the default_timestamp_format, with a couple
@@ -1008,12 +938,6 @@ module Sequel
       end
     end
 
-    # REMOVE40
-    def table_ref_append(sql, v)
-      Sequel::Deprecation.deprecate('Dataset#table_ref_append', "Please switch to Dataset#identifier_append")
-      identifier_append(sql, v)
-    end
-    
     # Append all identifiers in args interspersed by commas.
     def identifier_list_append(sql, args)
       c = false
@@ -1467,8 +1391,6 @@ module Sequel
       values = opts[:values]
       sql << SET
       if values.is_a?(Hash)
-        values = opts[:defaults].merge(values) if opts[:defaults]
-        values = values.merge(opts[:overrides]) if opts[:overrides]
         c = false
         eq = EQUAL
         values.each do |k, v|

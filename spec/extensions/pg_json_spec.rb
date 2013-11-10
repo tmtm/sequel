@@ -1,5 +1,7 @@
 require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
 
+Sequel.extension :pg_array, :pg_json
+
 describe "pg_json extension" do
   before(:all) do
     m = Sequel::Postgres
@@ -36,6 +38,14 @@ describe "pg_json extension" do
     @m.parse_json('{"a": "b", "c": {"d": "e"}}').to_hash.should == {'a'=>'b', 'c'=>{'d'=>'e'}}
   end
 
+  it "should parse json and non-json plain strings, integers, and floats correctly in db_parse_json" do
+    @m.db_parse_json('{"a": "b", "c": {"d": "e"}}').to_hash.should == {'a'=>'b', 'c'=>{'d'=>'e'}}
+    @m.db_parse_json('[1, [2], {"a": "b"}]').to_a.should == [1, [2], {'a'=>'b'}]
+    @m.db_parse_json('1').should == 1
+    @m.db_parse_json('"b"').should == 'b'
+    @m.db_parse_json('1.1').should == 1.1
+  end
+
   it "should raise an error when attempting to parse invalid json" do
     proc{@m.parse_json('')}.should raise_error(Sequel::InvalidValue)
     proc{@m.parse_json('1')}.should raise_error(Sequel::InvalidValue)
@@ -67,10 +77,6 @@ describe "pg_json extension" do
     Sequel.pg_json(a).should equal(a)
     a = Sequel.pg_json([])
     Sequel.pg_json(a).should equal(a)
-  end
-
-  it "should have Sequel.pg_json raise an Error if called with a non-hash or array" do
-    proc{Sequel.pg_json(:a)}.should raise_error(Sequel::Error)
   end
 
   it "should have JSONHash#to_hash method for getting underlying hash" do

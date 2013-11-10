@@ -21,14 +21,6 @@ describe Sequel::Model::Errors do
     @errors.should_not be_empty
   end
   
-  qspecify "should return errors for a specific attribute using #[]" do
-    @errors[:blah].should == []
-    @errors[:blah] << 'blah'
-    @errors[:blah].should == ['blah']
-
-    @errors[:bleu].should == []
-  end
-  
   specify "should return an array of errors for a specific attribute using #on if there are errors" do
     @errors.add(:blah, 'blah')
     @errors.on(:blah).should == ['blah']
@@ -38,11 +30,6 @@ describe Sequel::Model::Errors do
     @errors.on(:blah).should == nil
   end
   
-  qspecify "should accept errors using #[] <<" do
-    @errors[:blah] << 'blah'
-    @errors[:blah].should == ['blah']
-  end
-    
   specify "should accept errors using #add" do
     @errors.add :blah, 'zzzz'
     @errors[:blah].should == ['zzzz']
@@ -163,26 +150,26 @@ describe "Model#save" do
       end
     end
     @m = @c.load(:id => 4, :x=>6)
-    MODEL_DB.reset
+    DB.reset
   end
 
   specify "should save only if validations pass" do
     @m.raise_on_save_failure = false
     @m.should_not be_valid
     @m.save
-    MODEL_DB.sqls.should be_empty
+    DB.sqls.should be_empty
     
     @m.x = 7
     @m.should be_valid
     @m.save.should_not be_false
-    MODEL_DB.sqls.should == ['UPDATE people SET x = 7 WHERE (id = 4)']
+    DB.sqls.should == ['UPDATE people SET x = 7 WHERE (id = 4)']
   end
   
   specify "should skip validations if the :validate=>false option is used" do
     @m.raise_on_save_failure = false
     @m.should_not be_valid
     @m.save(:validate=>false)
-    MODEL_DB.sqls.should == ['UPDATE people SET x = 6 WHERE (id = 4)']
+    DB.sqls.should == ['UPDATE people SET x = 6 WHERE (id = 4)']
   end
 
   specify "should raise error if validations fail and raise_on_save_failure is true" do

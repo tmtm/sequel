@@ -133,6 +133,9 @@ module Sequel
           disconnect ||= !status_ok
           disconnect ||= e.message =~ DISCONNECT_ERROR_RE
           disconnect ? raise(Sequel.convert_exception_class(e, Sequel::DatabaseDisconnectError)) : raise
+        rescue IOError, Errno::EPIPE, Errno::ECONNRESET => e
+          disconnect = true
+          raise(Sequel.convert_exception_class(e, Sequel::DatabaseDisconnectError))
         ensure
           block if status_ok && !disconnect
         end
@@ -270,12 +273,12 @@ module Sequel
       def disconnect_connection(conn)
         begin
           conn.finish
-        rescue PGError
+        rescue PGError, IOError
         end
       end
       
       # Execute the given SQL with the given args on an available connection.
-      def execute(sql, opts={}, &block)
+      def execute(sql, opts=OPTS, &block)
         synchronize(opts[:server]){|conn| check_database_errors{_execute(conn, sql, opts, &block)}}
       end
 
@@ -304,7 +307,7 @@ module Sequel
         # If a block is provided, the method continually yields to the block, one yield
         # per row.  If a block is not provided, a single string is returned with all
         # of the data.
-        def copy_table(table, opts={})
+        def copy_table(table, opts=OPTS)
           synchronize(opts[:server]) do |conn|
             conn.execute(copy_table_sql(table, opts))
             begin
@@ -344,7 +347,7 @@ module Sequel
         #
         # If a block is provided and :data option is not, this will yield to the block repeatedly.
         # The block should return a string, or nil to signal that it is finished.
-        def copy_into(table, opts={})
+        def copy_into(table, opts=OPTS)
           data = opts[:data]
           data = Array(data) if data.is_a?(String)
 
@@ -397,7 +400,7 @@ module Sequel
         # * the channel the notification was sent to (as a string)
         # * the backend pid of the notifier (as an integer),
         # * and the payload of the notification (as a string or nil).
-        def listen(channels, opts={}, &block)
+        def listen(channels, opts=OPTS, &block)
           check_database_errors do
             synchronize(opts[:server]) do |conn|
               begin
@@ -503,7 +506,7 @@ module Sequel
       # deallocate that statement first and then prepare this statement.
       # If a block is given, yield the result, otherwise, return the number
       # of rows changed.
-      def execute_prepared_statement(conn, name, opts={}, &block)
+      def execute_prepared_statement(conn, name, opts=OPTS, &block)
         ps = prepared_statement(name)
         sql = ps.prepared_sql
         ps_name = name.to_s
@@ -613,7 +616,7 @@ module Sequel
       #
       # This is untested with the prepared statement/bound variable support,
       # and unlikely to work with either.
-      def use_cursor(opts={})
+      def use_cursor(opts=OPTS)
         clone(:cursor=>{:rows_per_fetch=>1000}.merge(opts))
       end
 
@@ -636,23 +639,15 @@ module Sequel
 
           private
           
-          # PostgreSQL most of the time requires type information for each of
-          # arguments to a prepared statement.  Handle this by allowing the
-          # named argument to have a __* suffix, with the * being the type.
-          # In the generated SQL, cast the bound argument to that type to
-          # elminate ambiguity (and PostgreSQL from raising an exception).
           def prepared_arg(k)
-            y, type = k.to_s.split("__")
+            y = k
             if i = prepared_args.index(y)
               i += 1
             else
               prepared_args << y
               i = prepared_args.length
             end
-            if type
-              Sequel::Deprecation.deprecate('Specifying prepared statement argument types via the __type suffix', "If a manual cast is really need, surround the prepared statement argument in Sequel.cast")
-            end
-            LiteralString.new("#{prepared_arg_placeholder}#{i}#{"::#{type}" if type}")
+            LiteralString.new("#{prepared_arg_placeholder}#{i}")
           end
 
           # Always assume a prepared argument.
@@ -669,12 +664,12 @@ module Sequel
           private
           
           # Execute the given SQL with the stored bind arguments.
-          def execute(sql, opts={}, &block)
+          def execute(sql, opts=OPTS, &block)
             super(sql, {:arguments=>bind_arguments}.merge(opts), &block)
           end
           
           # Same as execute, explicit due to intricacies of alias and super.
-          def execute_dui(sql, opts={}, &block)
+          def execute_dui(sql, opts=OPTS, &block)
             super(sql, {:arguments=>bind_arguments}.merge(opts), &block)
           end
         end
@@ -694,18 +689,18 @@ module Sequel
           
           # Execute the stored prepared statement name and the stored bind
           # arguments instead of the SQL given.
-          def execute(sql, opts={}, &block)
+          def execute(sql, opts=OPTS, &block)
             super(prepared_statement_name, opts, &block)
           end
           
           # Same as execute, explicit due to intricacies of alias and super.
-          def execute_dui(sql, opts={}, &block)
+          def execute_dui(sql, opts=OPTS, &block)
             super(prepared_statement_name, opts, &block)
           end
         end
         
         # Execute the given type of statement with the hash of values.
-        def call(type, bind_vars={}, *values, &block)
+        def call(type, bind_vars=OPTS, *values, &block)
           ps = to_prepared_statement(type, values)
           ps.extend(BindArgumentMethods)
           ps.call(bind_vars, &block)
@@ -776,12 +771,12 @@ module Sequel
       
       # Use the driver's escape_bytea
       def literal_blob_append(sql, v)
-        sql << APOS << db.synchronize{|c| c.escape_bytea(v)} << APOS
+        sql << APOS << db.synchronize(@opts[:server]){|c| c.escape_bytea(v)} << APOS
       end
       
       # Use the driver's escape_string
       def literal_string_append(sql, v)
-        sql << APOS << db.synchronize{|c| c.escape_string(v)} << APOS
+        sql << APOS << db.synchronize(@opts[:server]){|c| c.escape_string(v)} << APOS
       end
       
       # For each row in the result set, yield a hash with column name symbol
@@ -800,7 +795,7 @@ module Sequel
   end
 end
 
-if SEQUEL_POSTGRES_USES_PG
+if SEQUEL_POSTGRES_USES_PG && !ENV['NO_SEQUEL_PG']
   begin
     require 'sequel_pg'
   rescue LoadError

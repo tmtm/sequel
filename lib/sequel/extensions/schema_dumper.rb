@@ -12,9 +12,6 @@ Sequel.extension :eval_inspect
 
 module Sequel
   module SchemaDumper
-  end
-
-  class Database
     # Dump foreign key constraints for all tables as a migration. This complements
     # the :foreign_keys=>false option to dump_schema_migration. This only dumps
     # the constraints (not the columns) using alter_table/add_foreign_key with an
@@ -22,8 +19,7 @@ module Sequel
     #
     # Note that the migration this produces does not have a down
     # block, so you cannot reverse it.
-    def dump_foreign_key_migration(options={})
-      Sequel::Deprecation.deprecate('Loading the schema_dumper extension globally', "Please use Database#extension to load the extension into this database") unless is_a?(SchemaDumper)
+    def dump_foreign_key_migration(options=OPTS)
       ts = tables(options)
       <<END_MIG
 Sequel.migration do
@@ -41,8 +37,7 @@ END_MIG
     # :index_names :: If set to false, don't record names of indexes. If
     #                 set to :namespace, prepend the table name to the index name if the
     #                 database does not use a global index namespace.
-    def dump_indexes_migration(options={})
-      Sequel::Deprecation.deprecate('Loading the schema_dumper extension globally', "Please use Database#extension to load the extension into this database") unless is_a?(SchemaDumper)
+    def dump_indexes_migration(options=OPTS)
       ts = tables(options)
       <<END_MIG
 Sequel.migration do
@@ -66,8 +61,7 @@ END_MIG
     #             later via #dump_index_migration).
     # :index_names :: If set to false, don't record names of indexes. If
     #                 set to :namespace, prepend the table name to the index name.
-    def dump_schema_migration(options={})
-      Sequel::Deprecation.deprecate('Loading the schema_dumper extension globally', "Please use Database#extension to load the extension into this database") unless is_a?(SchemaDumper)
+    def dump_schema_migration(options=OPTS)
       options = options.dup
       if options[:indexes] == false && !options.has_key?(:foreign_keys)
         # Unless foreign_keys option is specifically set, disable if indexes
@@ -96,8 +90,7 @@ END_MIG
 
     # Return a string with a create table block that will recreate the given
     # table's schema.  Takes the same options as dump_schema_migration.
-    def dump_table_schema(table, options={})
-      Sequel::Deprecation.deprecate('Loading the schema_dumper extension globally', "Please use Database#extension to load the extension into this database") unless is_a?(SchemaDumper)
+    def dump_table_schema(table, options=OPTS)
       table = table.value.to_s if table.is_a?(SQL::Identifier)
       gen = dump_table_generator(table, options)
       commands = [gen.dump_columns, gen.dump_constraints, gen.dump_indexes].reject{|x| x == ''}.join("\n\n")
@@ -215,7 +208,7 @@ END_MIG
 
     # For the table given, get the list of foreign keys and return an alter_table
     # string that would add the foreign keys if run in a migration.
-    def dump_table_foreign_keys(table, options={})
+    def dump_table_foreign_keys(table, options=OPTS)
       if supports_foreign_key_parsing?
         fks = foreign_key_list(table, options).sort_by{|fk| fk[:columns].map{|c| c.to_s}}
       end
@@ -229,7 +222,7 @@ END_MIG
 
     # Return a Schema::Generator object that will recreate the
     # table's schema.  Takes the same options as dump_schema_migration.
-    def dump_table_generator(table, options={})
+    def dump_table_generator(table, options=OPTS)
       table = table.value.to_s if table.is_a?(SQL::Identifier)
       raise(Error, "must provide table as a Symbol, String, or Sequel::SQL::Identifier") unless [String, Symbol].any?{|c| table.is_a?(c)}
       s = schema(table).dup
@@ -277,7 +270,7 @@ END_MIG
 
     # Return a string that containing add_index/drop_index method calls for
     # creating the index migration.
-    def dump_table_indexes(table, meth, options={})
+    def dump_table_indexes(table, meth, options=OPTS)
       if supports_index_parsing?
         indexes = indexes(table).sort_by{|k,v| k.to_s}
       else
@@ -292,7 +285,7 @@ END_MIG
     end
 
     # Convert the parsed index information into options to the Generators index method. 
-    def index_to_generator_opts(table, name, index_opts, options={})
+    def index_to_generator_opts(table, name, index_opts, options=OPTS)
       h = {}
       if options[:index_names] != false && default_index_name(table, index_opts[:columns]) != name.to_s
         if options[:index_names] == :namespace && !global_index_namespace?
@@ -308,7 +301,7 @@ END_MIG
 
     # Sort the tables so that referenced tables are created before tables that
     # reference them, and then by name.  If foreign keys are disabled, just sort by name.
-    def sort_dumped_tables(tables, options={})
+    def sort_dumped_tables(tables, options=OPTS)
       if options[:foreign_keys] != false && supports_foreign_key_parsing?
         table_fks = {}
         tables.each{|t| table_fks[t] = foreign_key_list(t)}
@@ -440,7 +433,7 @@ END_MIG
       #   The value of this option should be the table name to use.
       # * :drop_index - Same as add_index, but create drop_index statements.
       # * :ignore_errors - Add the ignore_errors option to the outputted indexes
-      def dump_indexes(options={})
+      def dump_indexes(options=OPTS)
         is = indexes.map do |c|
           c = c.dup
           cols = c.delete(:columns)

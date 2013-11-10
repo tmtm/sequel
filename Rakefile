@@ -148,7 +148,7 @@ begin
     if RUBY_VERSION < '1.9'
       t = spec.call("#{name}_cov", files, "#{d} with coverage")
       t.rcov = true
-      t.rcov_opts = File.read("spec/rcov.opts").split("\n")
+      t.rcov_opts = File.file?("spec/rcov.opts") ? File.read("spec/rcov.opts").split("\n") : []
       b.call(t) if b
     else
       desc "#{d} with coverage"
@@ -167,22 +167,25 @@ begin
   spec.call("spec_model", Dir["spec/model/*_spec.rb"], "Run model specs")
   spec.call("_spec_model_no_assoc", Dir["spec/model/*_spec.rb"].delete_if{|f| f =~ /association|eager_loading/}, '')
   spec_with_cov.call("spec_core_ext", ["spec/core_extensions_spec.rb"], "Run core extensions specs"){|t| t.rcov_opts.concat(%w'--exclude "lib/sequel/([a-z_]+\.rb|adapters|connection_pool|database|dataset|model)"')}
-  spec_with_cov.call("spec_plugin", Dir["spec/extensions/*_spec.rb"], "Run extension/plugin specs"){|t| t.rcov_opts.concat(%w'--exclude "lib/sequel/([a-z_]+\.rb|adapters|connection_pool|database|dataset|model)"')}
+  spec_with_cov.call("spec_plugin", Dir["spec/extensions/*_spec.rb"].sort_by{rand}, "Run extension/plugin specs"){|t| t.rcov_opts.concat(%w'--exclude "lib/sequel/([a-z_]+\.rb|adapters|connection_pool|database|dataset|model)"')}
   spec_with_cov.call("spec_integration", Dir["spec/integration/*_test.rb"], "Run integration tests")
 
   %w'postgres sqlite mysql informix oracle firebird mssql db2'.each do |adapter|
     spec_with_cov.call("spec_#{adapter}", ["spec/adapters/#{adapter}_spec.rb"] + Dir["spec/integration/*_test.rb"], "Run #{adapter} specs"){|t| t.rcov_opts.concat(%w'--exclude "lib/sequel/([a-z_]+\.rb|connection_pool|database|dataset|model|extensions|plugins)"')}
   end
 
-  task :spec_travis=>[:spec, :spec_plugin, :spec_core_ext, :spec_sqlite] do
+  task :spec_travis=>[:spec, :spec_plugin, :spec_core_ext] do
     if defined?(RUBY_ENGINE) && RUBY_ENGINE == 'jruby'
-      ENV['SEQUEL_PG_SPEC_DB'] = "jdbc:postgresql://localhost/sequel_test?user=postgres"
-      ENV['SEQUEL_MY_SPEC_DB'] = "jdbc:mysql://localhost/sequel_test?user=root"
+      ENV['SEQUEL_SQLITE_URL'] = "jdbc:sqlite::memory:"
+      ENV['SEQUEL_POSTGRES_URL'] = "jdbc:postgresql://localhost/sequel_test?user=postgres"
+      ENV['SEQUEL_MYSQL_URL'] = "jdbc:mysql://localhost/sequel_test?user=root"
     else
-      ENV['SEQUEL_PG_SPEC_DB'] = "postgres://localhost/sequel_test?user=postgres"
-      ENV['SEQUEL_MY_SPEC_DB'] = "mysql2://localhost/sequel_test?user=root"
+      ENV['SEQUEL_SQLITE_URL'] = "sqlite:/"
+      ENV['SEQUEL_POSTGRES_URL'] = "postgres://localhost/sequel_test?user=postgres"
+      ENV['SEQUEL_MYSQL_URL'] = "mysql2://localhost/sequel_test?user=root"
     end
 
+    Rake::Task['spec_sqlite'].invoke
     Rake::Task['spec_postgres'].invoke
     Rake::Task['spec_mysql'].invoke
   end

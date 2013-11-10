@@ -93,15 +93,6 @@ module Sequel
         # Do not call this method with untrusted input, as that can result in
         # arbitrary code execution.
         def to_s_method(meth, args=:self) # :nodoc:
-          # REMOVE40
-          class_eval(<<-END, __FILE__, __LINE__+1)
-            def to_s(ds)
-              Sequel::Deprecation.deprecate('SQL::Expression#to_s', "Please switch to using Dataset#literal to literalize expressions")
-              s = ''
-              to_s_append(ds, s)
-              s
-            end
-          END
           class_eval("def to_s_append(ds, sql) ds.#{meth}_append(sql, #{args}) end", __FILE__, __LINE__)
         end
       end
@@ -331,7 +322,7 @@ module Sequel
       #
       #   Sequel.asc(:a) # a ASC
       #   Sequel.asc(:b, :nulls=>:last) # b ASC NULLS LAST
-      def asc(arg, opts={})
+      def asc(arg, opts=OPTS)
         SQL::OrderedExpression.new(arg, false, opts)
       end
 
@@ -392,6 +383,16 @@ module Sequel
         SQL::EmulatedFunction.new(:char_length, arg)
       end
 
+      # Do a deep qualification of the argument using the qualifier.  This recurses into
+      # nested structures.
+      #
+      #   Sequel.deep_qualify(:table, :column) # "table"."column"
+      #   Sequel.deep_qualify(:table, Sequel.+(:column, 1)) # "table"."column" + 1
+      #   Sequel.deep_qualify(:table, Sequel.like(:a, 'b')) # "table"."a" LIKE 'b' ESCAPE '\'
+      def deep_qualify(qualifier, expr)
+        Sequel::Qualifier.new(Sequel, qualifier).transform(expr)
+      end
+
       # Return a delayed evaluation that uses the passed block. This is used
       # to delay evaluations of the code to runtime.  For example, with
       # the following code:
@@ -422,7 +423,7 @@ module Sequel
       #
       #   Sequel.desc(:a) # b DESC
       #   Sequel.desc(:b, :nulls=>:first) # b DESC NULLS FIRST
-      def desc(arg, opts={})
+      def desc(arg, opts=OPTS)
         SQL::OrderedExpression.new(arg, true, opts)
       end
 
@@ -624,6 +625,8 @@ module Sequel
       #   Sequel.subscript(:array, 1) # array[1]
       #   Sequel.subscript(:array, 1, 2) # array[1, 2]
       #   Sequel.subscript(:array, [1, 2]) # array[1, 2]
+      #   Sequel.subscript(:array, 1..2) # array[1:2]
+      #   Sequel.subscript(:array, 1...3) # array[1:2]
       def subscript(exp, *subs)
         SQL::Subscript.new(exp, subs.flatten)
       end
@@ -743,10 +746,6 @@ module Sequel
       end
     end
 
-    # Only exists for backwards compatibility, ignore it.
-    module NoBooleanInputMethods
-    end
-
     # This module includes the standard mathematical methods (+, -, *, and /)
     # that are defined on objects that can be used in a numeric context in SQL
     # (+Symbol+, +LiteralString+, and +SQL::GenericExpression+).
@@ -828,7 +827,7 @@ module Sequel
       # :nulls :: Set to :first to use NULLS FIRST (so NULL values are ordered
       #           before other values), or :last to use NULLS LAST (so NULL values
       #           are ordered after other values).
-      def asc(opts={})
+      def asc(opts=OPTS)
         OrderedExpression.new(self, false, opts)
       end
       
@@ -838,7 +837,7 @@ module Sequel
       # :nulls :: Set to :first to use NULLS FIRST (so NULL values are ordered
       #           before other values), or :last to use NULLS LAST (so NULL values
       #           are ordered after other values).
-      def desc(opts={})
+      def desc(opts=OPTS)
         OrderedExpression.new(self, true, opts)
       end
     end
@@ -908,6 +907,8 @@ module Sequel
       #   :array.sql_subscript(1) # array[1]
       #   :array.sql_subscript(1, 2) # array[1, 2]
       #   :array.sql_subscript([1, 2]) # array[1, 2]
+      #   :array.sql_subscript(:array, 1..2) # array[1:2]
+      #   :array.sql_subscript(:array, 1...3) # array[1:2]
       def sql_subscript(*sub)
         Subscript.new(self, sub.flatten)
       end
@@ -1361,7 +1362,7 @@ module Sequel
       # Options:
       #
       # :nulls :: Can be :first/:last for NULLS FIRST/LAST.
-      def initialize(expression, descending = true, opts={})
+      def initialize(expression, descending = true, opts=OPTS)
         @expression, @descending, @nulls = expression, descending, opts[:nulls]
       end
 
@@ -1501,9 +1502,6 @@ module Sequel
     # hash-like conditions specifier.
     class ValueList < ::Array
     end
-
-    # Deprecated name for +ValueList+, used for backwards compatibility
-    SQLArray = ValueList
 
     # The purpose of the +VirtualRow+ class is to allow the easy creation of SQL identifiers and functions
     # without relying on methods defined on +Symbol+.  This is useful if another library defines
@@ -1654,7 +1652,7 @@ module Sequel
       attr_reader :opts
 
       # Set the options to the options given
-      def initialize(opts={})
+      def initialize(opts=OPTS)
         @opts = opts
       end
 

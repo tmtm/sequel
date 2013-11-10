@@ -1,3 +1,117 @@
+=== 4.0.0 (2013-07-01)
+
+* Correctly parse composite primary keys on SQLite 3.7.16+ (jeremyevans)
+
+* Recognize another disconnect error in the jdbc/oracle adapter (jeremyevans)
+
+* Add pg_json_ops extension for calling JSON functions and operators in PostgreSQL 9.3+ (jeremyevans)
+
+* Handle non-JSON plain strings, integers, and floats in PostgreSQL JSON columns in pg_json extension (jeremyevans)
+
+* Dataset#from now accepts virtual row blocks (jeremyevans)
+
+* Add Database#refresh_view on PostgreSQL to support refreshing materialized views (jeremyevans)
+
+* Support the Database#drop_view :if_exists option on PostgreSQL (jeremyevans)
+
+* Support the Database#{create,drop}_view :materialized option for creating materialized views in PostgreSQL 9.3+ (jeremyevans)
+
+* Support the Database#create_view :recursive option for creating recursive views in PostgreSQL 9.3+ (jeremyevans)
+
+* Support the Database#create_view :columns option for using explicit columns (jeremyevans)
+
+* Support the Database#create_schema :owner and :if_not_exists options on PostgreSQL (jeremyevans)
+
+* Support :index_type=>:gist option to create GIST full text indexes on PostgreSQL (jeremyevans)
+
+* Add Postgres::ArrayOp#replace for the array_replace function in PostgreSQL 9.3+ (jeremyevans)
+
+* Add Postgres::ArrayOp#remove for the array_remove function in PostgreSQL 9.3+ (jeremyevans)
+
+* Add Postgres::ArrayOp#hstore for creating hstores from arrays (jeremyevans)
+
+* Make Postgres::ArrayOp#[] return ArrayOp if given a range (jeremyevans)
+
+* Ensure that CHECK constraints are surrounded with parentheses (jeremyevans)
+
+* Ensure Dataset#unbind returned variable hash uses symbol keys (jeremyevans)
+
+* Add pg_array_associations plugin, for associations based on PostgreSQL arrays containing foreign keys (jeremyevans)
+
+* Add Sequel.deep_qualify, for easily doing a deep qualification (jeremyevans)
+
+* Enable use of window functions for limited eager loading by default (jeremyevans)
+
+* Handle offsets correctly when eager loading one_to_one associations (jeremyevans)
+
+* Raise exception for infinite and NaN floats on MySQL (jeremyevans) (#677)
+
+* Make dataset string literalization that requires database connection use dataset's chosen server (jeremyevans)
+
+* Make sure an offset without a limit is handled correctly when eager loading (jeremyevans)
+
+* Allow providing ranges as subscripts for array[start:end] (jeremyevans)
+
+* Prepare one_to_one associations in the prepared_statements_associations plugin (jeremyevans)
+
+* Use prepared statements when the association has :conditions in the prepared_statements_associations plugin (jeremyevans)
+
+* Fix prepared statement usage in some additional cases in the prepared_statements_associations plugin (jeremyevans)
+
+* Hex escape blob input on MySQL (jeremyevans)
+
+* Handle more disconnect errors when using the postgres adapter with the postgres-pr driver (jeremyevans)
+
+* Model#setter_methods private method now accepts 1 argument instead of 2 (jeremyevans)
+
+* Model#set_restricted and #update_restricted private methods now accept 2 arguments instead of 3 (jeremyevans)
+
+* ungraphed on an eager_graph dataset now resets the original row_proc (jeremyevans)
+
+* eager_graph now returns a naked dataset (jeremyevans)
+
+* All behavior deprecated in Sequel 3.48.0 has been removed (jeremyevans)
+
+* Make adapter/integration spec environment variables more consistent (jeremyevans)
+
+* Sequel no longer provides default databases for adapter/integration specs (jeremyevans)
+
+* Model#save no longer calls #_refresh internally (jeremyevans)
+
+* Model#set_all and #update_all can now update the primary key (jeremyevans)
+
+* Integrate many_to_one_pk_lookup and association_autoreloading plugins into main associations plugin (jeremyevans)
+
+* Make defaults_setter plugin operate in a lazy manner (jeremyevans)
+
+* Plugins now extend the model class with ClassMethods before including InstanceMethods (jeremyevans)
+
+* Remove Model::EMPTY_INSTANCE_VARIABLES (jeremyevans)
+
+* Model.raise_on_typecast_failure now defaults to false (jeremyevans)
+
+* Model#_save private method now only takes a single argument (jeremyevans)
+
+* Remove Dataset#columns_without_introspection from columns_introspection extension (jeremyevans)
+
+* Make boolean prepared statement arguments work on sqlite adapter when integer_booleans is true (jeremyevans)
+
+* Make Database#tables and #views reflect search_path on PostgreSQL (jeremyevans)
+
+* SQLite now defaults to true for integer_booleans and false for use_timestamp_timezones (jeremyevans)
+
+* Make the default value for most option hashes a shared frozen hash (jeremyevans)
+
+* Remove Sequel::NotImplemented exception (jeremyevans)
+
+* Automatically alias single expressions in Dataset#get, #select_map, and #select_order_map, to work around possible DoS issues (jeremyevans)
+
+* Use a connection queue instead of stack by default for threaded connection pools (jeremyevans)
+
+* Remove SQL::SQLArray alias for SQL::ValueList (jeremyevans)
+
+* Remove SQL::NoBooleanInputMethods empty module (jeremyevans)
+
 === 3.48.0 (2013-06-01)
 
 * Make named_timezones extension usable by databases allowing timezone strings to be given to Database#timezone= (jeremyevans)

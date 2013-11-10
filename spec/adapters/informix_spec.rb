@@ -1,14 +1,11 @@
+SEQUEL_ADAPTER_TEST = :informix
+
 require File.join(File.dirname(File.expand_path(__FILE__)), 'spec_helper.rb')
 
-unless defined?(INFORMIX_DB)
-  INFORMIX_DB = Sequel.connect('informix://localhost/mydb')
+if DB.table_exists?(:test)
+  DB.drop_table :test
 end
-INTEGRATION_DB = INFORMIX_DB unless defined?(INTEGRATION_DB)
-
-if INFORMIX_DB.table_exists?(:test)
-  INFORMIX_DB.drop_table :test
-end
-INFORMIX_DB.create_table :test do
+DB.create_table :test do
   text :name
   integer :value
   
@@ -17,16 +14,16 @@ end
 
 describe "A Informix database" do
   specify "should provide disconnect functionality" do
-    INFORMIX_DB.execute("select user from dual")
-    INFORMIX_DB.pool.size.should == 1
-    INFORMIX_DB.disconnect
-    INFORMIX_DB.pool.size.should == 0
+    DB.execute("select user from dual")
+    DB.pool.size.should == 1
+    DB.disconnect
+    DB.pool.size.should == 0
   end
 end
 
 describe "A Informix dataset" do
   before do
-    @d = INFORMIX_DB[:test]
+    @d = DB[:test]
     @d.delete # remove all records
   end
   
@@ -79,7 +76,7 @@ describe "A Informix dataset" do
   end
   
   specify "should support transactions" do
-    INFORMIX_DB.transaction do
+    DB.transaction do
       @d << {:name => 'abc', :value => 1}
     end
 

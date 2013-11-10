@@ -17,17 +17,11 @@
 #
 #   Sequel.sqlite('blog.db'){|db| puts db[:users].count} 
 #
-# Sequel currently adds methods to the Array, Hash, String and Symbol classes by
-# default.  You can either require 'sequel/no_core_ext' or set the
-# +SEQUEL_NO_CORE_EXTENSIONS+ constant or environment variable before requiring
-# sequel to have Sequel not add methods to those classes.
-#
 # For a more expanded introduction, see the {README}[link:files/README_rdoc.html].
 # For a quicker introduction, see the {cheat sheet}[link:files/doc/cheat_sheet_rdoc.html].
 module Sequel
   @convert_two_digit_years = true
   @datetime_class = Time
-  @empty_array_handle_nulls = true
 
   # Whether Sequel is being run in single threaded mode
   @single_threaded = false
@@ -54,51 +48,6 @@ module Sequel
     # they often implement them differently (e.g. + using seconds on +Time+ and
     # days on +DateTime+).
     attr_accessor :datetime_class
-
-    # Sets whether or not to attempt to handle NULL values correctly when given
-    # an empty array.  By default:
-    #
-    #   DB[:a].filter(:b=>[])
-    #   # SELECT * FROM a WHERE (b != b)
-    #   DB[:a].exclude(:b=>[])
-    #   # SELECT * FROM a WHERE (b = b)
-    #
-    # However, some databases (e.g. MySQL) will perform very poorly
-    # with this type of query.  You can set this to false to get the
-    # following behavior:
-    #
-    #   DB[:a].filter(:b=>[])
-    #   # SELECT * FROM a WHERE 1 = 0
-    #   DB[:a].exclude(:b=>[])
-    #   # SELECT * FROM a WHERE 1 = 1
-    # 
-    # This may not handle NULLs correctly, but can be much faster on
-    # some databases.
-    attr_reader :empty_array_handle_nulls
-
-    def empty_array_handle_nulls=(v)
-      Sequel::Deprecation.deprecate('Sequel.empty_array_handle_nulls=', 'Please switch to loading the empty_array_ignore_nulls plugin if you wish empty array handling to ignore nulls')
-      @empty_array_handle_nulls = v
-    end
-
-    # REMOVE40
-    def virtual_row_instance_eval
-      Sequel::Deprecation.deprecate('Sequel.virtual_row_instance_eval', 'It has no effect, so you can safely stop calling it.')
-    end
-    def virtual_row_instance_eval=(v)
-      Sequel::Deprecation.deprecate('Sequel.virtual_row_instance_eval=', 'It has no effect, so you can safely stop calling it.')
-    end
-    def k_require(*a)
-      Sequel::Deprecation.deprecate('Sequel.k_require', 'Please switch to Kernel.require')
-      Kernel.require(*a)
-    end
-
-    private
-
-    # Make thread safe requiring reentrant to prevent deadlocks.
-    def check_requiring_thread
-      Sequel::Deprecation.deprecate('Sequel.check_requiring_thread', 'It has no effect, so you can safely stop calling it.')
-    end
   end
 
   # Returns true if the passed object could be a specifier of conditions, false otherwise.
@@ -120,6 +69,9 @@ module Sequel
       false
     end
   end
+
+  # Frozen hash used as the default options hash for most options.
+  OPTS = {}.freeze
 
   # Creates a new database object based on the supplied connection string
   # and optional arguments.  The specified scheme determines the database
@@ -368,7 +320,7 @@ module Sequel
   # to uncommit the changes on DB3.  For that kind of support, you need to
   # have two-phase commit/prepared transactions (which Sequel supports on
   # some databases).
-  def self.transaction(dbs, opts={}, &block)
+  def self.transaction(dbs, opts=OPTS, &block)
     unless opts[:rollback]
       rescue_rollback = true
       opts = opts.merge(:rollback=>:reraise)
@@ -383,16 +335,6 @@ module Sequel
     else
       pr.call
     end
-  end
-
-  # REMOVE40
-  def self.ts_require(*args)
-    Sequel::Deprecation.deprecate('Sequel.ts_require', 'Please switch to Sequel.require')
-    require(*args)
-  end
-  def self.tsk_require(*args)
-    Sequel::Deprecation.deprecate('Sequel.tsk_require', 'Please switch to Kernel.require')
-    Kernel.require(*args)
   end
 
   # If the supplied block takes a single argument,
@@ -441,11 +383,6 @@ module Sequel
   private_class_method :adapter_method, :def_adapter_method
 
   require(%w"deprecated sql connection_pool exceptions dataset database timezones ast_transformer version")
-  if !defined?(::SEQUEL_NO_CORE_EXTENSIONS) && !ENV.has_key?('SEQUEL_NO_CORE_EXTENSIONS')
-  # :nocov:
-    require(:deprecated_core_extensions)
-  # :nocov:
-  end
 
   # Add the database adapter class methods to Sequel via metaprogramming
   def_adapter_method(*Database::ADAPTERS)

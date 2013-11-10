@@ -5,19 +5,10 @@ describe "Dataset" do
     @dataset = Sequel.mock.dataset
   end
   
-  qspecify "should accept database and opts in initialize" do
-    db = "db"
-    opts = {:from => :test}
-    d = Sequel::Dataset.new(db, opts)
-    d.db.should be(db)
-    d.opts.should be(opts)
-  end
-    
   specify "should accept database in initialize" do
     db = "db"
     d = Sequel::Dataset.new(db)
     d.db.should be(db)
-    d.opts.should be_a_kind_of(Hash)
     d.opts.should == {}
   end
   
@@ -411,20 +402,20 @@ describe "Dataset#where" do
   specify "should not replace named placeholders that don't exist in the hash" do
     @dataset.where('price < :price AND id in :ids', :price=>100).select_sql.should == "SELECT * FROM test WHERE (price < 100 AND id in :ids)"
   end
-    
-  qspecify "should handle a mismatched number of placeholders" do
-    @dataset.where('price < ? AND id in ?', 100).select_sql.should == "SELECT * FROM test WHERE (price < 100 AND id in NULL)"
-    @dataset.where('price < ? AND id in ?', 100, [1, 2, 3], 4).select_sql.should == "SELECT * FROM test WHERE (price < 100 AND id in (1, 2, 3))"
-  end
   
+  specify "should raise an error for a mismatched number of placeholders" do
+    proc{@dataset.where('price < ? AND id in ?', 100).select_sql}.should raise_error(Sequel::Error)
+    proc{@dataset.where('price < ? AND id in ?', 100, [1, 2, 3], 4).select_sql}.should raise_error(Sequel::Error)
+  end
+
   specify "should handle placeholders when using an array" do
     @dataset.where(Sequel.lit(['price < ', ' AND id in '], 100, [1, 2, 3])).select_sql.should == "SELECT * FROM test WHERE price < 100 AND id in (1, 2, 3)"
     @dataset.where(Sequel.lit(['price < ', ' AND id in '], 100)).select_sql.should == "SELECT * FROM test WHERE price < 100 AND id in "
   end
-  
-  qspecify "should handle a mismatched number of placeholders when using an array" do
-    @dataset.where(Sequel.lit(['a = ', ' AND price < ', ' AND id in '], 100)).select_sql.should == "SELECT * FROM test WHERE a = 100 AND price <  AND id in NULL"
-    @dataset.where(Sequel.lit(['price < ', ' AND id in '], 100, [1, 2, 3], 4)).select_sql.should == "SELECT * FROM test WHERE price < 100 AND id in (1, 2, 3)"
+
+  specify "should handle a mismatched number of placeholders when using an array" do
+    proc{@dataset.where(Sequel.lit(['a = ', ' AND price < ', ' AND id in '], 100)).select_sql}.should raise_error(Sequel::Error)
+    proc{@dataset.where(Sequel.lit(['price < ', ' AND id in '], 100, [1, 2, 3], 4)).select_sql}.should raise_error(Sequel::Error)
   end
   
   specify "should handle partial names" do
@@ -485,18 +476,6 @@ describe "Dataset#where" do
     @dataset.exclude([:id1, :id2] => []).sql.should == "SELECT * FROM test WHERE ((id1 = id1) AND (id2 = id2))"
   end
 
-  qspecify "should handle all types of IN/NOT IN queries with empty arrays when empty_array_handle_nulls is false" do
-    begin
-      Sequel.empty_array_handle_nulls = false
-      @dataset.filter(:id => []).sql.should == "SELECT * FROM test WHERE (1 = 0)"
-      @dataset.filter([:id1, :id2] => []).sql.should == "SELECT * FROM test WHERE (1 = 0)"
-      @dataset.exclude(:id => []).sql.should == "SELECT * FROM test WHERE (1 = 1)"
-      @dataset.exclude([:id1, :id2] => []).sql.should == "SELECT * FROM test WHERE (1 = 1)"
-    ensure
-      Sequel.empty_array_handle_nulls = true
-    end
-  end
-
   specify "should handle all types of IN/NOT IN queries" do
     @dataset.filter(:id => @d1.select(:id)).sql.should == "SELECT * FROM test WHERE (id IN (SELECT id FROM test WHERE (region = 'Asia')))"
     @dataset.filter(:id => [1, 2]).sql.should == "SELECT * FROM test WHERE (id IN (1, 2))"
@@ -537,21 +516,6 @@ describe "Dataset#where" do
     db.sqls.should == ["SELECT id1, id2 FROM test WHERE (region = 'Asia')"]
     @dataset.exclude([:id1, :id2] => d1).sql.should == "SELECT * FROM test WHERE ((id1 = id1) AND (id2 = id2))"
     db.sqls.should == ["SELECT id1, id2 FROM test WHERE (region = 'Asia')"]
-  end
-  
-  qspecify "should handle IN/NOT IN queries with multiple columns and an empty dataset where the database doesn't support it when empty_array_handle nulls is true" do
-    begin
-      Sequel.empty_array_handle_nulls = false
-      meta_def(@dataset, :supports_multiple_column_in?){false}
-      db = Sequel.mock
-      d1 = db[:test].select(:id1, :id2).filter(:region=>'Asia').columns(:id1, :id2)
-      @dataset.filter([:id1, :id2] => d1).sql.should == "SELECT * FROM test WHERE (1 = 0)"
-      db.sqls.should == ["SELECT id1, id2 FROM test WHERE (region = 'Asia')"]
-      @dataset.exclude([:id1, :id2] => d1).sql.should == "SELECT * FROM test WHERE (1 = 1)"
-      db.sqls.should == ["SELECT id1, id2 FROM test WHERE (region = 'Asia')"]
-    ensure
-      Sequel.empty_array_handle_nulls = true
-    end
   end
   
   specify "should handle IN/NOT IN queries for datasets with row_procs" do
@@ -640,8 +604,8 @@ describe "Dataset#or" do
     @d1 = @dataset.where(:x => 1)
   end
   
-  qspecify "should raise if no filter exists" do
-    proc {@dataset.or(:a => 1)}.should raise_error(Sequel::Error)
+  specify "should just clone if no where clause exists" do
+    @dataset.or(:a => 1).sql.should == 'SELECT * FROM test'
   end
   
   specify "should just clone if given an empty argument" do
@@ -671,10 +635,6 @@ describe "Dataset#or" do
   specify "should allow the use of blocks and arguments simultaneously" do
     @d1.or(Sequel.expr(:zz) < 3){yy > 3}.sql.should == 'SELECT * FROM test WHERE ((x = 1) OR ((zz < 3) AND (yy > 3)))'
   end
-
-  qspecify "should modify the having clause if there is already a having clause" do
-    @dataset.having(:x => 1).or(:y => 2).sql.should == 'SELECT * FROM test HAVING ((x = 1) OR (y = 2))'
-  end
 end
 
 describe "Dataset#and" do
@@ -683,13 +643,11 @@ describe "Dataset#and" do
     @d1 = @dataset.where(:x => 1)
   end
   
-  qspecify "should raise if no filter exists" do
-    proc {@dataset.and(:a => 1)}.should raise_error(Sequel::Error)
-    proc {@dataset.where(:a => 1).group(:t).and(:b => 2)}.should_not raise_error(Sequel::Error)
-    @dataset.where(:a => 1).group(:t).and(:b => 2).sql.should == "SELECT * FROM test WHERE ((a = 1) AND (b = 2)) GROUP BY t"
+  specify "should add a WHERE filter if none exists" do
+    @dataset.and(:a => 1).sql.should == 'SELECT * FROM test WHERE (a = 1)'
   end
   
-  specify "should add an alternative expression to the where clause" do
+  specify "should add an expression to the where clause" do
     @d1.and(:y => 2).sql.should == 'SELECT * FROM test WHERE ((x = 1) AND (y = 2))'
   end
   
@@ -715,10 +673,6 @@ describe "Dataset#exclude" do
 
   specify "should correctly negate the expression when one condition is given" do
     @dataset.exclude(:region=>'Asia').select_sql.should == "SELECT * FROM test WHERE (region != 'Asia')"
-  end
-
-  qspecify "should affect the having clause if having clause is already used" do
-    @dataset.group_and_count(:name).having{count > 2}.exclude{count > 5}.sql.should == "SELECT name, count(*) AS count FROM test GROUP BY name HAVING ((count > 2) AND (count <= 5))"
   end
 
   specify "should take multiple conditions as a hash and express the logic correctly in SQL" do
@@ -776,8 +730,8 @@ describe "Dataset#invert" do
     @d = Sequel.mock.dataset.from(:test)
   end
 
-  qspecify "should raise error if the dataset is not filtered" do
-    proc{@d.invert}.should raise_error(Sequel::Error)
+  specify "should return a dataset that selects no rows if dataset is not filtered" do
+    @d.invert.sql.should == "SELECT * FROM test WHERE 'f'"
   end
 
   specify "should invert current filter if dataset is filtered" do
@@ -807,14 +761,6 @@ describe "Dataset#having" do
 
   specify "should support proc expressions" do
     @grouped.having{Sequel.function(:sum, :population) > 10}.sql.should == "SELECT region, sum(population), avg(gdp) FROM test GROUP BY region HAVING (sum(population) > 10)"
-  end
-
-  qspecify "should work with and on the having clause" do
-    @grouped.having(Sequel.expr(:a) > 1).and(Sequel.expr(:b) < 2).sql.should == "SELECT region, sum(population), avg(gdp) FROM test GROUP BY region HAVING ((a > 1) AND (b < 2))"
-  end
-
-  qspecify "should work with filter on the having clause" do
-    @grouped.having(Sequel.expr(:a) > 1).filter(Sequel.expr(:b) < 2).sql.should == "SELECT region, sum(population), avg(gdp) FROM test GROUP BY region HAVING ((a > 1) AND (b < 2))"
   end
 end
 
@@ -1161,12 +1107,6 @@ describe "Dataset#from" do
     @dataset.from(d1, d2).sql.should == "SELECT * FROM (SELECT * FROM a GROUP BY b) AS t1, (SELECT * FROM c GROUP BY d) AS t2"
   end
   
-  qspecify "should accept a hash for aliasing" do
-    @dataset.from(:a => :b).sql.should == "SELECT * FROM a AS b"
-    @dataset.from(:a => 'b').sql.should == "SELECT * FROM a AS b"
-    @dataset.from(@dataset.from(:a).group(:b) => :c).sql.should == "SELECT * FROM (SELECT * FROM a GROUP BY b) AS c"
-  end
-
   specify "should always use a subquery if given a dataset" do
     @dataset.from(@dataset.from(:a)).select_sql.should == "SELECT * FROM (SELECT * FROM a) AS t1"
   end
@@ -1189,6 +1129,14 @@ describe "Dataset#from" do
   specify "should accept sql functions" do
     @dataset.from(Sequel.function(:abc, :def)).select_sql.should == "SELECT * FROM abc(def)"
     @dataset.from(Sequel.function(:a, :i)).select_sql.should == "SELECT * FROM a(i)"
+  end
+
+  specify "should accept virtual row blocks" do
+    @dataset.from{abc(de)}.select_sql.should == "SELECT * FROM abc(de)"
+    @dataset.from{[i, abc(de)]}.select_sql.should == "SELECT * FROM i, abc(de)"
+    @dataset.from(:a){i}.select_sql.should == "SELECT * FROM a, i"
+    @dataset.from(:a, :b){i}.select_sql.should == "SELECT * FROM a, b, i"
+    @dataset.from(:a, :b){[i, abc(de)]}.select_sql.should == "SELECT * FROM a, b, i, abc(de)"
   end
 
   specify "should accept :schema__table___alias symbol format" do
@@ -1249,12 +1197,8 @@ describe "Dataset#select" do
     @d.select(Sequel.as([[:b, :c]], :n)).sql.should == 'SELECT (b = c) AS n FROM test'
   end
 
-  qspecify "should handle hashes returned from virtual row blocks" do
-    @d.select{{:b=>:c}}.sql.should == 'SELECT b AS c FROM test'
-  end
-
-  qspecify "should accept a hash for AS values" do
-    @d.select(:name => 'n', :__ggh => 'age').sql.should =~ /SELECT ((name AS n, __ggh AS age)|(__ggh AS age, name AS n)) FROM test/
+  specify "should handle hashes returned from virtual row blocks" do
+    @d.select{{:b=>:c}}.sql.should == 'SELECT (b = c) FROM test'
   end
 
   specify "should override the previous select option" do
@@ -1357,10 +1301,10 @@ describe "Dataset#select_more" do
     @d = Sequel.mock.dataset.from(:test)
   end
   
-  qspecify "should act like #select for datasets with no selection" do
-    @d.select_more(:a, :b).sql.should == 'SELECT a, b FROM test'
-    @d.select_all.select_more(:a, :b).sql.should == 'SELECT a, b FROM test'
-    @d.select(:blah).select_all.select_more(:a, :b).sql.should == 'SELECT a, b FROM test'
+  specify "should act like #select_append for datasets with no selection" do
+    @d.select_more(:a, :b).sql.should == 'SELECT *, a, b FROM test'
+    @d.select_all.select_more(:a, :b).sql.should == 'SELECT *, a, b FROM test'
+    @d.select(:blah).select_all.select_more(:a, :b).sql.should == 'SELECT *, a, b FROM test'
   end
 
   specify "should add to the currently selected columns" do
@@ -2139,10 +2083,6 @@ describe "Dataset#join_table" do
     @d.join(:categories, :category_id=>:id).sql.should == 'SELECT * FROM "items" INNER JOIN "categories" ON ("categories"."category_id" = "items"."id")'
   end
   
-  qspecify "should support aliased tables using the deprecated argument" do
-    @d.from('stats').join('players', {:id => :player_id}, 'p').sql.should == 'SELECT * FROM "stats" INNER JOIN "players" AS "p" ON ("p"."id" = "stats"."player_id")'
-  end
-
   specify "should support aliased tables using the :table_alias option" do
     @d.from('stats').join('players', {:id => :player_id}, :table_alias=>:p).sql.should == 'SELECT * FROM "stats" INNER JOIN "players" AS "p" ON ("p"."id" = "stats"."player_id")'
   end
@@ -2183,6 +2123,10 @@ describe "Dataset#join_table" do
   
   specify "should do deep qualification if :qualify=>:deep option is given" do
     @d.from('stats').join(:players, {Sequel.function(:f, :id) => Sequel.subscript(:player_id, 0)}, :qualify=>:deep).sql.should == 'SELECT * FROM "stats" INNER JOIN "players" ON (f("players"."id") = "stats"."player_id"[0])'
+  end
+  
+  specify "should do only qualification if :qualify=>:symbol option is given" do
+    @d.from('stats').join(:players, {Sequel.function(:f, :id) => :player_id}, :qualify=>:symbol).sql.should == 'SELECT * FROM "stats" INNER JOIN "players" ON (f("id") = "stats"."player_id")'
   end
   
   specify "should allow for arbitrary conditions in the JOIN clause" do
@@ -2328,62 +2272,6 @@ describe "Dataset#join_table" do
     proc{@d.join(:categories, :a=>:d).update_sql(:a=>1)}.should raise_error(Sequel::InvalidOperation)
     proc{@d.join(:categories, :a=>:d).delete_sql}.should raise_error(Sequel::InvalidOperation)
     proc{@d.join(:categories, :a=>:d).truncate_sql}.should raise_error(Sequel::InvalidOperation)
-  end
-
-  specify "should raise an error if an invalid option is passed" do
-    proc{@d.join(:c, [:id], nil)}.should raise_error(Sequel::Error)
-    proc{@d.join(:c, [:id], Sequel.qualify(:d, :c))}.should raise_error(Sequel::Error)
-  end
-end
-
-describe "Dataset#[]=" do
-  qspecify "should perform an update on the specified filter" do
-    db = Sequel.mock
-    ds = db[:items]
-    ds[:a => 1] = {:x => 3}
-    db.sqls.should == ['UPDATE items SET x = 3 WHERE (a = 1)']
-  end
-end
-
-describe "Dataset#set" do
-  qspecify "should act as alias to #update" do
-    db = Sequel.mock
-    ds = db[:items]
-    ds.set({:x => 3})
-    db.sqls.should == ['UPDATE items SET x = 3']
-  end
-end
-
-describe "Dataset#insert_multiple" do
-  before do
-    @db = Sequel.mock(:autoid=>2)
-    @ds = @db[:items]
-  end
-  
-  qspecify "should insert all items in the supplied array" do
-    @ds.insert_multiple(['aa', 5, 3, {:a => 2}])
-    @db.sqls.should == ["INSERT INTO items VALUES ('aa')",
-      "INSERT INTO items VALUES (5)",
-      "INSERT INTO items VALUES (3)",
-      "INSERT INTO items (a) VALUES (2)"]
-  end
-  
-  qspecify "should pass array items through the supplied block if given" do
-    @ds.insert_multiple(["inevitable", "hello", "the ticking clock"]){|i| i.gsub('l', 'r')}
-    @db.sqls.should == ["INSERT INTO items VALUES ('inevitabre')",
-      "INSERT INTO items VALUES ('herro')",
-      "INSERT INTO items VALUES ('the ticking crock')"]
-  end
-
-  qspecify "should return array of inserted ids" do
-    @ds.insert_multiple(['aa', 5, 3, {:a => 2}]).should == [2, 3, 4, 5]
-  end
-
-  qspecify "should work exactly like in metioned in the example" do
-    @ds.insert_multiple([{:x=>1}, {:x=>2}]){|row| row[:y] = row[:x] * 2 ; row }
-    sqls = @db.sqls
-    ["INSERT INTO items (x, y) VALUES (1, 2)", "INSERT INTO items (y, x) VALUES (2, 1)"].should include(sqls[0])
-    ["INSERT INTO items (x, y) VALUES (2, 4)", "INSERT INTO items (y, x) VALUES (4, 2)"].should include(sqls[1])
   end
 end
 
@@ -2586,12 +2474,6 @@ describe "Dataset compound operations" do
     @b = Sequel.mock.dataset.from(:b).filter(:z => 2)
   end
   
-  qspecify "should support ALL with deprecated 2nd argument" do
-    @b.union(@a, true).sql.should == "SELECT * FROM (SELECT * FROM b WHERE (z = 2) UNION ALL SELECT * FROM a WHERE (z = 1)) AS t1"
-    @b.intersect(@a, true).sql.should == "SELECT * FROM (SELECT * FROM b WHERE (z = 2) INTERSECT ALL SELECT * FROM a WHERE (z = 1)) AS t1"
-    @b.except(@a, true).sql.should == "SELECT * FROM (SELECT * FROM b WHERE (z = 2) EXCEPT ALL SELECT * FROM a WHERE (z = 1)) AS t1"
-  end
-
   specify "should support UNION and UNION ALL" do
     @a.union(@b).sql.should == "SELECT * FROM (SELECT * FROM a WHERE (z = 1) UNION SELECT * FROM b WHERE (z = 2)) AS t1"
     @b.union(@a, :all=>true).sql.should == "SELECT * FROM (SELECT * FROM b WHERE (z = 2) UNION ALL SELECT * FROM a WHERE (z = 1)) AS t1"
@@ -2759,8 +2641,8 @@ describe "Dataset#get" do
   end
   
   specify "should support false and nil values" do
-    @d.get(false).should == "SELECT 'f' FROM test LIMIT 1"
-    @d.get(nil).should == "SELECT NULL FROM test LIMIT 1"
+    @d.get(false).should == "SELECT 'f' AS v FROM test LIMIT 1"
+    @d.get(nil).should == "SELECT NULL AS v FROM test LIMIT 1"
   end
 
   specify "should support an array of expressions to get an array of results" do
@@ -3125,20 +3007,6 @@ describe "Dataset" do
   end
 end
 
-describe "Dataset#to_csv" do
-  before do
-    @ds = Sequel.mock(:fetch=>[{:a=>1, :b=>2, :c=>3}, {:a=>4, :b=>5, :c=>6}, {:a=>7, :b=>8, :c=>9}])[:items].columns(:a, :b, :c)
-  end
-  
-  qspecify "should format a CSV representation of the records" do
-    @ds.to_csv.should == "a, b, c\r\n1, 2, 3\r\n4, 5, 6\r\n7, 8, 9\r\n"
-  end
-
-  qspecify "should exclude column titles if so specified" do
-    @ds.to_csv(false).should == "1, 2, 3\r\n4, 5, 6\r\n7, 8, 9\r\n"
-  end
-end
-
 describe "Dataset#update_sql" do
   before do
     @ds = Sequel.mock.dataset.from(:items)
@@ -3332,10 +3200,6 @@ describe "Dataset default #fetch_rows, #insert, #update, #delete, #with_sql_dele
   before do
     @db = Sequel::Database.new
     @ds = @db[:items]
-  end
-
-  qspecify "#fetch_rows should raise a Sequel::NotImplemented" do
-    proc{@ds.fetch_rows(''){}}.should raise_error(Sequel::NotImplemented)
   end
 
   specify "#delete should execute delete SQL" do
@@ -3577,66 +3441,6 @@ describe "Sequel::Dataset#each_server" do
   end
 end
 
-describe "Sequel::Dataset #set_defaults" do
-  before do
-    @ds = Sequel.mock.dataset.from(:items)
-  end
-
-  qspecify "should set the default values for inserts" do
-    @ds = @ds.set_defaults(:x=>1)
-    @ds.insert_sql.should == "INSERT INTO items (x) VALUES (1)"
-    @ds.insert_sql(:x=>2).should == "INSERT INTO items (x) VALUES (2)"
-    @ds.insert_sql(:y=>2).should =~ /INSERT INTO items \([xy], [xy]\) VALUES \([21], [21]\)/
-    @ds.set_defaults(:y=>2).insert_sql.should =~ /INSERT INTO items \([xy], [xy]\) VALUES \([21], [21]\)/
-    @ds.set_defaults(:x=>2).insert_sql.should == "INSERT INTO items (x) VALUES (2)"
-  end
-
-  qspecify "should set the default values for updates" do
-    @ds = @ds.set_defaults(:x=>1)
-    @ds.update_sql.should == "UPDATE items SET x = 1"
-    @ds.update_sql(:x=>2).should == "UPDATE items SET x = 2"
-    @ds.update_sql(:y=>2).should =~ /UPDATE items SET (x = 1|y = 2), (x = 1|y = 2)/
-    @ds.set_defaults(:y=>2).update_sql.should =~ /UPDATE items SET (x = 1|y = 2), (x = 1|y = 2)/
-    @ds.set_defaults(:x=>2).update_sql.should == "UPDATE items SET x = 2"
-  end
-end
-
-describe "Sequel::Dataset #set_overrides" do
-  before do
-    @ds = Sequel.mock.dataset.from(:items)
-  end
-
-  qspecify "should override the given values for inserts" do
-    @ds = @ds.set_overrides(:x=>1)
-    @ds.insert_sql.should == "INSERT INTO items (x) VALUES (1)"
-    @ds.insert_sql(:x=>2).should == "INSERT INTO items (x) VALUES (1)"
-    @ds.insert_sql(:y=>2).should =~ /INSERT INTO items \([xy], [xy]\) VALUES \([21], [21]\)/
-    @ds.set_overrides(:y=>2).insert_sql.should =~ /INSERT INTO items \([xy], [xy]\) VALUES \([21], [21]\)/
-    @ds.set_overrides(:x=>2).insert_sql.should == "INSERT INTO items (x) VALUES (1)"
-  end
-
-  qspecify "should override the given values for updates" do
-    @ds = @ds.set_overrides(:x=>1)
-    @ds.update_sql.should == "UPDATE items SET x = 1"
-    @ds.update_sql(:x=>2).should == "UPDATE items SET x = 1"
-    @ds.update_sql(:y=>2).should =~ /UPDATE items SET (x = 1|y = 2), (x = 1|y = 2)/
-    @ds.set_overrides(:y=>2).update_sql.should =~ /UPDATE items SET (x = 1|y = 2), (x = 1|y = 2)/
-    @ds.set_overrides(:x=>2).update_sql.should == "UPDATE items SET x = 1"
-  end
-end
-
-describe "Sequel::Dataset#qualify_to_first_source" do
-  qspecify "should qualify to the first source" do
-    Sequel.mock.dataset.from(:t).filter{a<b}.qualify_to_first_source.sql.should == 'SELECT t.* FROM t WHERE (t.a < t.b)'
-  end
-end
-
-describe "Sequel::Dataset#qualify_to" do
-  qspecify "should qualify to the given table" do
-    Sequel.mock.dataset.from(:t).filter{a<b}.qualify_to(:e).sql.should == 'SELECT e.* FROM t WHERE (e.a < e.b)'
-  end
-end
-
 describe "Sequel::Dataset#qualify" do
   before do
     @ds = Sequel::Database.new[:t]
@@ -3654,8 +3458,8 @@ describe "Sequel::Dataset#qualify" do
     @ds.filter(:a=>1).order(:a).group(:a).having(:a).qualify.sql.should == 'SELECT t.* FROM t WHERE (t.a = 1) GROUP BY t.a HAVING t.a ORDER BY t.a'
   end
 
-  qspecify "should handle hashes in select option" do
-    @ds.select(:a=>:b).qualify.sql.should == 'SELECT t.a AS b FROM t'
+  specify "should handle hashes in select option" do
+    @ds.select(:a=>:b).qualify.sql.should == 'SELECT (t.a = t.b) FROM t'
   end
 
   specify "should handle symbols" do
@@ -3746,6 +3550,11 @@ describe "Sequel::Dataset#unbind" do
   specify "should return variables that could be used bound to recreate the previous query" do
     @ds.filter(:foo=>1).unbind.last.should == {:foo=>1}
     @ds.exclude(:foo=>1).unbind.last.should == {:foo=>1}
+  end
+
+  specify "should return variables as symbols" do
+    @ds.filter(Sequel.expr(:foo)=>1).unbind.last.should == {:foo=>1}
+    @ds.exclude(Sequel.expr(:foo__bar)=>1).unbind.last.should == {:"foo.bar"=>1}
   end
 
   specify "should handle numerics, strings, dates, times, and datetimes" do
@@ -4117,7 +3926,7 @@ describe "Sequel::Dataset#select_map" do
   
   specify "should handle an expression without a determinable alias" do
     @ds.select_map{a(t__c)}.should == [1, 2]
-    @ds.db.sqls.should == ['SELECT a(t.c) FROM t']
+    @ds.db.sqls.should == ['SELECT a(t.c) AS v FROM t']
   end
 
   specify "should accept a block" do
@@ -4196,7 +4005,7 @@ describe "Sequel::Dataset#select_order_map" do
   
   specify "should handle an expression without a determinable alias" do
     @ds.select_order_map{a(t__c)}.should == [1, 2]
-    @ds.db.sqls.should == ['SELECT a(t.c) FROM t ORDER BY a(t.c)']
+    @ds.db.sqls.should == ['SELECT a(t.c) AS v FROM t ORDER BY a(t.c)']
   end
 
   specify "should accept a block" do
@@ -4575,12 +4384,6 @@ describe "Dataset#schema_and_table" do
   it "should correctly handle qualified identifiers" do
     @ds.schema_and_table(Sequel.qualify(:t, :s)).should == ['t', 's']
   end
-
-  qspecify "should respect default_schema" do
-    @ds.db.default_schema = :foo
-    @ds.schema_and_table(:s).should == ['foo', 's']
-    @ds.schema_and_table(:s, nil).should == [nil, 's']
-  end
 end
 
 describe "Dataset#split_qualifiers" do
@@ -4614,13 +4417,6 @@ describe "Dataset#split_qualifiers" do
     @ds.split_qualifiers(Sequel.qualify(:d, Sequel.qualify(:t, :s))).should == ['d', 't', 's']
     @ds.split_qualifiers(Sequel.qualify(:d__t, :s__s2)).should == ['d', 't', 's', 's2']
     @ds.split_qualifiers(Sequel.qualify(Sequel.qualify(:d, :t), Sequel.qualify(:s, :s2))).should == ['d', 't', 's', 's2']
-  end
-
-  qspecify "should respect default_schema" do
-    @ds.db.default_schema = :foo
-    @ds.split_qualifiers(:s).should == ['foo', 's']
-    @ds.split_qualifiers(:s, nil).should == ['s']
-    @ds.split_qualifiers(Sequel.qualify(:d__t, :s)).should == ['d', 't', 's']
   end
 end
 

@@ -72,6 +72,8 @@ module Sequel
   # You can set the +SEQUEL_NO_ASSOCIATIONS+ constant or environment variable to
   # make Sequel not load the associations plugin by default.
   class Model
+    OPTS = Sequel::OPTS
+
     # Map that stores model classes created with <tt>Sequel::Model()</tt>, to allow the reopening
     # of classes when dealing with code reloading.
     ANONYMOUS_MODEL_CLASSES = {}
@@ -80,9 +82,6 @@ module Sequel
     DATASET_METHODS = (Dataset::ACTION_METHODS + Dataset::QUERY_METHODS +
       [:each_server]) - [:and, :or, :[], :[]=, :columns, :columns!, :delete, :update, :add_graph_aliases]
     
-    # Class instance variables to set to nil when a subclass is created, for -w compliance
-    EMPTY_INSTANCE_VARIABLES = [:@overridable_methods_module, :@db]
-
     # Boolean settings that can be modified at the global, class, or instance level.
     BOOLEAN_SETTINGS = [:typecast_empty_string_to_nil, :typecast_on_assignment, :strict_param_setting, \
       :raise_on_save_failure, :raise_on_typecast_failure, :require_modification, :use_after_commit_rollback, :use_transactions]
@@ -94,7 +93,7 @@ module Sequel
 
     # Hooks that are called after an action.  When overriding these, it is recommended to call
     # +super+ on the first line of your method, so later hooks are called after earlier hooks.
-    AFTER_HOOKS = [:after_initialize, :after_create, :after_update, :after_save, :after_destroy,
+    AFTER_HOOKS = [:after_create, :after_update, :after_save, :after_destroy,
       :after_validation, :after_commit, :after_rollback, :after_destroy_commit, :after_destroy_rollback]
 
     # Hooks that are called around an action.  If overridden, these methods must call super
@@ -120,7 +119,7 @@ module Sequel
       :@typecast_empty_string_to_nil=>nil, :@typecast_on_assignment=>nil,
       :@raise_on_typecast_failure=>nil, :@plugins=>:dup, :@setter_methods=>nil,
       :@use_after_commit_rollback=>nil, :@fast_pk_lookup_sql=>nil,
-      :@fast_instance_delete_sql=>nil, :@default_eager_limit_strategy=>nil,
+      :@fast_instance_delete_sql=>nil,
       :@db=>nil, :@default_set_fields_options=>:dup}
 
     # Regular expression that determines if a method name is normal in the sense that
@@ -137,7 +136,7 @@ module Sequel
     @db_schema = nil
     @dataset = nil
     @dataset_method_modules = []
-    @default_eager_limit_strategy = nil
+    @default_eager_limit_strategy = true
     @default_set_fields_options = {}
     @overridable_methods_module = nil
     @fast_pk_lookup_sql = nil
@@ -145,7 +144,7 @@ module Sequel
     @plugins = []
     @primary_key = :id
     @raise_on_save_failure = true
-    @raise_on_typecast_failure = true
+    @raise_on_typecast_failure = false
     @require_modification = nil
     @restrict_primary_key = true
     @restricted_columns = nil

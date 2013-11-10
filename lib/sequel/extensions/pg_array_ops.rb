@@ -76,7 +76,9 @@ module Sequel
       #
       #   array_op[1] # array[1]
       def [](key)
-        Sequel::SQL::Subscript.new(self, [key])
+        s = Sequel::SQL::Subscript.new(self, [key])
+        s = ArrayOp.new(s) if key.is_a?(Range)
+        s
       end
 
       # Call the ALL function:
@@ -124,6 +126,23 @@ module Sequel
         function(:array_dims)
       end
 
+      # Convert the array into an hstore using the hstore function.
+      # If given an argument, use the two array form:
+      #
+      #   array_op.hstore          # hstore(array)
+      #   array_op.hstore(:array2) # hstore(array, array2)
+      def hstore(arg=(no_arg_given=true; nil))
+        v = if no_arg_given
+          Sequel.function(:hstore, self)
+        else
+          Sequel.function(:hstore, self, wrap_array(arg))
+        end
+        if Sequel.respond_to?(:hstore_op)
+          v = Sequel.hstore_op(v)
+        end
+        v
+      end
+
       # Call the array_length method:
       #
       #   array_op.length    # array_length(array, 1)
@@ -159,6 +178,21 @@ module Sequel
       # Return the receiver.
       def pg_array
         self
+      end
+
+      # Remove the given element from the array:
+      #
+      #   array_op.remove(1) # array_remove(array, 1)
+      def remove(element)
+        ArrayOp.new(function(:array_remove, element))
+      end
+
+      # Replace the given element in the array with another
+      # element:
+      #
+      #   array_op.replace(1, 2) # array_replace(array, 1, 2)
+      def replace(element, replacement)
+        ArrayOp.new(function(:array_replace, element, replacement))
       end
 
       # Call the array_to_string method:

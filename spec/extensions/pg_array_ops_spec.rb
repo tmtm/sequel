@@ -1,5 +1,7 @@
 require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
 
+Sequel.extension :pg_array, :pg_array_ops, :pg_hstore, :pg_hstore_ops
+
 describe "Sequel::Postgres::ArrayOp" do
   before do
     @db = Sequel.connect('mock://postgres', :quote_identifiers=>false)
@@ -16,6 +18,10 @@ describe "Sequel::Postgres::ArrayOp" do
   it "#[] should support subscript access" do
     @db.literal(@a[1]).should == "a[1]"
     @db.literal(@a[1][2]).should == "a[1][2]"
+  end
+
+  it "#[] with a range should return an ArrayOp" do
+    @db.literal(@a[1..2].any).should == "ANY(a[1:2])"
   end
 
   it "#any should use the ANY method" do
@@ -43,6 +49,16 @@ describe "Sequel::Postgres::ArrayOp" do
     @db.literal(@a.concat(:b)).should == "(a || b)"
   end
 
+  it "#remove should remove the element from the array" do
+    @db.literal(@a.remove(1)).should == "array_remove(a, 1)"
+    @db.literal(@a.remove(1)[2]).should == "array_remove(a, 1)[2]"
+  end
+
+  it "#remove should replace the element in the array with another" do
+    @db.literal(@a.replace(1, 2)).should == "array_replace(a, 1, 2)"
+    @db.literal(@a.replace(1, 2)[3]).should == "array_replace(a, 1, 2)[3]"
+  end
+
   it "#unshift should use the || operator in prepend mode" do
     @db.literal(@a.unshift(:b)).should == "(b || a)"
   end
@@ -66,6 +82,15 @@ describe "Sequel::Postgres::ArrayOp" do
     @db.literal(@a.join).should == "array_to_string(a, '', NULL)"
     @db.literal(@a.join(':')).should == "array_to_string(a, ':', NULL)"
     @db.literal(@a.join(':', '*')).should == "array_to_string(a, ':', '*')"
+  end
+
+  it "#hstore should convert the item to an hstore using the hstore function" do
+    @db.literal(@a.hstore).should == "hstore(a)"
+    @db.literal(@a.hstore['a']).should == "(hstore(a) -> 'a')"
+    @db.literal(@a.hstore(:b)).should == "hstore(a, b)"
+    @db.literal(@a.hstore(:b)['a']).should == "(hstore(a, b) -> 'a')"
+    @db.literal(@a.hstore(%w'1')).should == "hstore(a, ARRAY['1'])"
+    @db.literal(@a.hstore(%w'1')['a']).should == "(hstore(a, ARRAY['1']) -> 'a')"
   end
 
   it "#unnest should use the unnest function" do

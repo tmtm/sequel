@@ -34,16 +34,6 @@ module Sequel
       first(*conditions)
     end
 
-    # Update all records matching the conditions with the values specified.
-    # Returns the number of rows affected.
-    #
-    #   DB[:table][:id=>1] = {:id=>2} # UPDATE table SET id = 2 WHERE id = 1
-    #   # => 1 # number of rows affected
-    def []=(conditions, values)
-      Sequel::Deprecation.deprecate('Dataset#[]=', 'Please load the sequel_3_dataset_methods extension to continue using it')
-      filter(conditions).update(values)
-    end
-
     # Returns an array with all records in the dataset. If a block is given,
     # the array is iterated over after all items have been loaded.
     #
@@ -148,9 +138,7 @@ module Sequel
     # running queries inside the block, you should use +all+ instead of +each+
     # for the outer queries, or use a separate thread or shard inside +each+.
     def each
-      if @opts[:graph]
-        graph_each{|r| yield r}
-      elsif row_proc = @row_proc
+      if row_proc = @row_proc
         fetch_rows(select_sql){|r| yield row_proc.call(r)}
       else
         fetch_rows(select_sql){|r| yield r}
@@ -166,15 +154,6 @@ module Sequel
       get(Sequel::SQL::AliasedExpression.new(1, :one)).nil?
     end
 
-    # Executes a select query and fetches records, yielding each record to the
-    # supplied block.  The yielded records should be hashes with symbol keys.
-    # This method should probably should not be called by user code, use +each+
-    # instead.
-    def fetch_rows(sql)
-      Sequel::Deprecation.deprecate('Dataset#fetch_rows default implementation and Sequel::NotImplemented', 'All dataset instances can be assumed to implement fetch_rows')
-      raise NotImplemented, NOTIMPL_MSG
-    end
-    
     # If a integer argument is given, it is interpreted as a limit, and then returns all 
     # matching records up to that limit.  If no argument is passed,
     # it returns the first matching record.  If any other type of
@@ -237,7 +216,7 @@ module Sequel
     #   DB[:table].get(:id) # SELECT id FROM table LIMIT 1
     #   # => 3
     #
-    #   ds.get{sum(id)} # SELECT sum(id) FROM table LIMIT 1
+    #   ds.get{sum(id)} # SELECT sum(id) AS v FROM table LIMIT 1
     #   # => 6
     #
     # You can pass an array of arguments to return multiple arguments,
@@ -260,7 +239,7 @@ module Sequel
         ds = if column.is_a?(Array)
           ds.select(*column)
         else
-          ds.select(column)
+          ds.select(auto_alias_expression(column))
         end
       end
 
@@ -296,7 +275,7 @@ module Sequel
     # :server :: Set the server/shard to use for the transaction and insert
     #            queries.
     # :slice :: Same as :commit_every, :commit_every takes precedence.
-    def import(columns, values, opts={})
+    def import(columns, values, opts=OPTS)
       return @db.transaction{insert(columns, values)} if values.is_a?(Dataset)
 
       return if values.empty?
@@ -357,30 +336,6 @@ module Sequel
         returning_fetch_rows(sql, &block)
       else
         execute_insert(sql)
-      end
-    end
-    
-    # Inserts multiple values. If a block is given it is invoked for each
-    # item in the given array before inserting it.  See +multi_insert+ as
-    # a possibly faster version that may be able to insert multiple
-    # records in one SQL statement (if supported by the database).
-    # Returns an array of primary keys of inserted rows.
-    #
-    #   DB[:table].insert_multiple([{:x=>1}, {:x=>2}])
-    #   # => [4, 5]
-    #   # INSERT INTO table (x) VALUES (1)
-    #   # INSERT INTO table (x) VALUES (2)
-    #
-    #   DB[:table].insert_multiple([{:x=>1}, {:x=>2}]){|row| row[:y] = row[:x] * 2; row }
-    #   # => [6, 7]
-    #   # INSERT INTO table (x, y) VALUES (1, 2)
-    #   # INSERT INTO table (x, y) VALUES (2, 4)
-    def insert_multiple(array, &block)
-      Sequel::Deprecation.deprecate('Dataset#insert_multiple', 'Please load the sequel_3_dataset_methods extension to continue using it')
-      if block
-        array.map{|i| insert(block.call(i))}
-      else
-        array.map{|i| insert(i)}
       end
     end
     
@@ -472,7 +427,7 @@ module Sequel
     # values.
     #
     # This respects the same options as #import.
-    def multi_insert(hashes, opts={})
+    def multi_insert(hashes, opts=OPTS)
       return if hashes.empty?
       columns = hashes.first.keys
       import(columns, hashes.map{|h| columns.map{|c| h[c]}}, opts)
@@ -491,7 +446,7 @@ module Sequel
     #
     # Options:
     # :rows_per_fetch :: The number of rows to fetch per query.  Defaults to 1000.
-    def paged_each(opts={})
+    def paged_each(opts=OPTS)
       unless @opts[:order]
         raise Sequel::Error, "Dataset#paged_each requires the dataset be ordered"
       end
@@ -622,13 +577,6 @@ module Sequel
       _select_map(column, true, &block)
     end
 
-    # Alias for update, but not aliased directly so subclasses
-    # don't have to override both methods.
-    def set(*args)
-      Sequel::Deprecation.deprecate('Dataset#set', 'Please switch to Dataset#update or load the sequel_3_dataset_methods extension to continue using it')
-      update(*args)
-    end
-    
     # Returns the first record in the dataset, or nil if the dataset
     # has no records. Users should probably use +first+ instead of
     # this method.
@@ -657,29 +605,6 @@ module Sequel
       aggregate_dataset.get{sum(column).as(:sum)}
     end
 
-    # Returns a string in CSV format containing the dataset records. By 
-    # default the CSV representation includes the column titles in the
-    # first line. You can turn that off by passing false as the 
-    # include_column_titles argument.
-    #
-    # This does not use a CSV library or handle quoting of values in
-    # any way.  If any values in any of the rows could include commas or line
-    # endings, you shouldn't use this.
-    #
-    #   puts DB[:table].to_csv # SELECT * FROM table
-    #   # id,name
-    #   # 1,Jim
-    #   # 2,Bob
-    def to_csv(include_column_titles = true)
-      Sequel::Deprecation.deprecate('Dataset#to_csv', 'Please load the sequel_3_dataset_methods extension to continue using it')
-      n = naked
-      cols = n.columns
-      csv = ''
-      csv << "#{cols.join(COMMA_SEPARATOR)}\r\n" if include_column_titles
-      n.each{|r| csv << "#{cols.collect{|c| r[c]}.join(COMMA_SEPARATOR)}\r\n"}
-      csv
-    end
-    
     # Returns a hash with one column used as key and another used as value.
     # If rows have duplicate values for the key column, the latter row(s)
     # will overwrite the value of the previous row(s). If the value_column
@@ -785,7 +710,7 @@ module Sequel
     #
     #   DB[:table].update(:x=>:x+1, :y=>0) # UPDATE table SET x = (x + 1), y = 0
     #   # => 10
-    def update(values={}, &block)
+    def update(values=OPTS, &block)
       sql = update_sql(values)
       if uses_returning?(:update)
         returning_fetch_rows(sql, &block)
@@ -840,12 +765,21 @@ module Sequel
       columns = Array(column)
       virtual_row_columns(columns, block)
       select_cols = order ? columns.map{|c| c.is_a?(SQL::OrderedExpression) ? c.expression : c} : columns
-      ds = ds.select(*select_cols)
       ds = ds.order(*columns.map{|c| unaliased_identifier(c)}) if order
       if column.is_a?(Array) || (columns.length > 1)
-        ds._select_map_multiple(hash_key_symbols(select_cols))
+        ds.select(*select_cols)._select_map_multiple(hash_key_symbols(select_cols))
       else
-        ds._select_map_single
+        ds.select(auto_alias_expression(select_cols.first))._select_map_single
+      end
+    end
+
+    # Automatically alias the given expression if it does not have an identifiable alias.
+    def auto_alias_expression(v)
+      case v
+      when LiteralString, Symbol, SQL::Identifier, SQL::QualifiedIdentifier, SQL::AliasedExpression
+        v
+      else
+        SQL::AliasedExpression.new(v, :v)
       end
     end
 
@@ -856,23 +790,23 @@ module Sequel
 
     # Execute the given select SQL on the database using execute. Use the
     # :read_only server unless a specific server is set.
-    def execute(sql, opts={}, &block)
+    def execute(sql, opts=OPTS, &block)
       @db.execute(sql, {:server=>@opts[:server] || :read_only}.merge(opts), &block)
     end
     
     # Execute the given SQL on the database using execute_ddl.
-    def execute_ddl(sql, opts={}, &block)
+    def execute_ddl(sql, opts=OPTS, &block)
       @db.execute_ddl(sql, default_server_opts(opts), &block)
       nil
     end
     
     # Execute the given SQL on the database using execute_dui.
-    def execute_dui(sql, opts={}, &block)
+    def execute_dui(sql, opts=OPTS, &block)
       @db.execute_dui(sql, default_server_opts(opts), &block)
     end
     
     # Execute the given SQL on the database using execute_insert.
-    def execute_insert(sql, opts={}, &block)
+    def execute_insert(sql, opts=OPTS, &block)
       @db.execute_insert(sql, default_server_opts(opts), &block)
     end
     
@@ -903,8 +837,6 @@ module Sequel
     def hash_key_symbol(s)
       if v = _hash_key_symbol(s)
         v
-      elsif block_given?
-        yield
       else
         raise(Error, "#{s.inspect} is not supported, should be a Symbol, SQL::Identifier, SQL::QualifiedIdentifier, or SQL::AliasedExpression")
       end

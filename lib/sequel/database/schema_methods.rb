@@ -46,7 +46,7 @@ module Sequel
     # :ignore_errors :: Ignore any DatabaseErrors that are raised
     #
     # See <tt>alter_table</tt>.
-    def add_index(table, columns, options={})
+    def add_index(table, columns, options=OPTS)
       e = options[:ignore_errors]
       begin
         alter_table(table){add_index(columns, options)}
@@ -117,7 +117,7 @@ module Sequel
     # :name :: The name of the table to create
     # :no_index :: Set to true not to create the second index.
     # :no_primary_key :: Set to true to not create the primary key.
-    def create_join_table(hash, options={})
+    def create_join_table(hash, options=OPTS)
       keys = hash.keys.sort_by{|k| k.to_s}
       create_table(join_table_name(hash, options), options) do
         keys.each do |key|
@@ -158,7 +158,7 @@ module Sequel
     # :unlogged :: Create the table as an unlogged table.
     #
     # See <tt>Schema::Generator</tt> and the {"Schema Modification" guide}[link:files/doc/schema_modification_rdoc.html].
-    def create_table(name, options={}, &block)
+    def create_table(name, options=OPTS, &block)
       remove_cached_schema(name)
       options = {:generator=>options} if options.is_a?(Schema::CreateTableGenerator)
       if sql = options[:as]
@@ -178,7 +178,7 @@ module Sequel
     #   # SELECT NULL FROM a LIMIT 1 -- check existence
     #   # DROP TABLE a -- drop table if already exists
     #   # CREATE TABLE a (a integer)
-    def create_table!(name, options={}, &block)
+    def create_table!(name, options=OPTS, &block)
       drop_table?(name)
       create_table(name, options, &block)
     end
@@ -188,7 +188,7 @@ module Sequel
     #   DB.create_table?(:a){Integer :a} 
     #   # SELECT NULL FROM a LIMIT 1 -- check existence
     #   # CREATE TABLE a (a integer) -- if it doesn't already exist
-    def create_table?(name, options={}, &block)
+    def create_table?(name, options=OPTS, &block)
       if supports_create_table_if_not_exists?
         create_table(name, options.merge(:if_not_exists=>true), &block)
       elsif !table_exists?(name)
@@ -209,7 +209,7 @@ module Sequel
     #
     # For databases where replacing a view is not natively supported, support
     # is emulated by dropping a view with the same name before creating the view.
-    def create_or_replace_view(name, source, options = {})
+    def create_or_replace_view(name, source, options = OPTS)
       if supports_create_or_replace_view?
         options = options.merge(:replace=>true)
       else
@@ -224,9 +224,23 @@ module Sequel
     #   DB.create_view(:cheap_items, "SELECT * FROM items WHERE price < 100")
     #   DB.create_view(:ruby_items, DB[:items].filter(:category => 'ruby'))
     #
+    # Options:
+    # :columns :: The column names to use for the view.  If not given,
+    #             automatically determined based on the input dataset.
+    #
     # PostgreSQL/SQLite specific option:
     # :temp :: Create a temporary view, automatically dropped on disconnect.
-    def create_view(name, source, options = {})
+    #
+    # PostgreSQL specific option:
+    # :materialized :: Creates a materialized view, similar to a regular view,
+    #                  but backed by a physical table.
+    # :recursive :: Creates a recursive view.  As columns must be specified for
+    #               recursive views, you can also set them as the value of this
+    #               option.  Since a recursive view requires a union that isn't
+    #               in a subquery, if you are providing a Dataset as the source
+    #               argument, if should probably call the union method with the
+    #               :all=>true and :from_self=>false options.
+    def create_view(name, source, options = OPTS)
       execute_ddl(create_view_sql(name, source, options))
       remove_cached_schema(name)
       nil
@@ -247,7 +261,7 @@ module Sequel
     #   DB.drop_index :posts, [:author, :title]
     #
     # See <tt>alter_table</tt>.
-    def drop_index(table, columns, options={})
+    def drop_index(table, columns, options=OPTS)
       alter_table(table){drop_index(columns, options)}
     end
 
@@ -256,7 +270,7 @@ module Sequel
     #
     #   drop_join_table(:cat_id=>:cats, :dog_id=>:dogs)
     #   # DROP TABLE cats_dogs
-    def drop_join_table(hash, options={})
+    def drop_join_table(hash, options=OPTS)
       drop_table(join_table_name(hash, options), options)
     end
     
@@ -299,6 +313,13 @@ module Sequel
     #   DB.drop_view(:cheap_items)
     #   DB.drop_view(:cheap_items, :pricey_items)
     #   DB.drop_view(:cheap_items, :pricey_items, :cascade=>true)
+    #
+    # Options:
+    # :cascade :: Also drop objects depending on this view.
+    #
+    # PostgreSQL specific options:
+    # :if_exists :: Do not raise an error if the view does not exist.
+    # :materialized :: Drop a materialized view.
     def drop_view(*names)
       options = names.last.is_a?(Hash) ? names.pop : {}
       names.each do |n|
@@ -542,7 +563,10 @@ module Sequel
       case constraint[:type]
       when :check
         check = constraint[:check]
-        sql << "CHECK #{filter_expr((check.is_a?(Array) && check.length == 1) ? check.first : check)}"
+        check = check.first if check.is_a?(Array) && check.length == 1
+        check = filter_expr(check)
+        check = "(#{check})" unless check[0..0] == '(' && check[-1..-1] == ')'
+        sql << "CHECK #{check}"
       when :primary_key
         sql << "PRIMARY KEY #{literal(constraint[:columns])}"
       when :foreign_key
@@ -631,22 +655,32 @@ module Sequel
       "CREATE #{temporary_table_sql if options[:temp]}TABLE#{' IF NOT EXISTS' if options[:if_not_exists]} #{options[:temp] ? quote_identifier(name) : quote_schema_table(name)}"
     end
 
+    # DDL fragment for initial part of CREATE VIEW statement
+    def create_view_prefix_sql(name, options)
+      create_view_sql_append_columns("CREATE #{'OR REPLACE 'if options[:replace]}VIEW #{quote_schema_table(name)}", options[:columns])
+    end
+
     # DDL statement for creating a view.
     def create_view_sql(name, source, options)
       source = source.sql if source.is_a?(Dataset)
       "#{create_view_prefix_sql(name, options)} AS #{source}"
     end
 
-    # DDL fragment for initial part of CREATE VIEW statement
-    def create_view_prefix_sql(name, options)
-      "CREATE #{'OR REPLACE 'if options[:replace]}VIEW #{quote_schema_table(name)}"
+    # Append the column list to the SQL, if a column list is given.
+    def create_view_sql_append_columns(sql, columns)
+      if columns
+        sql << ' ('
+        schema_utility_dataset.send(:identifier_list_append, sql, columns)
+        sql << ')'
+      end
+      sql
     end
 
     # Default index name for the table and columns, may be too long
     # for certain databases.
     def default_index_name(table_name, columns)
       schema, table = schema_and_table(table_name)
-      "#{"#{schema}_" if schema and schema != _default_schema}#{table}_#{columns.map{|c| [String, Symbol].any?{|cl| c.is_a?(cl)} ? c : literal(c).gsub(/\W/, '_')}.join(UNDERSCORE)}_index"
+      "#{"#{schema}_" if schema}#{table}_#{columns.map{|c| [String, Symbol].any?{|cl| c.is_a?(cl)} ? c : literal(c).gsub(/\W/, '_')}.join(UNDERSCORE)}_index"
     end
   
     # Get foreign key name for given table and columns.
@@ -750,12 +784,6 @@ module Sequel
     # SQL DDL statement for renaming a table.
     def rename_table_sql(name, new_name)
       "ALTER TABLE #{quote_schema_table(name)} RENAME TO #{quote_schema_table(new_name)}"
-    end
-
-    # REMOVE40
-    def reset_schema_utility_dataset
-      Sequel::Deprecation.deprecate('Database#reset_schema_utility_dataset', 'Switch to Database#reset_default_dataset')
-      reset_default_dataset
     end
 
     # Split the schema information from the table

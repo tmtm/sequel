@@ -6,7 +6,7 @@ describe "Composition plugin" do
     @c.plugin :composition
     @c.columns :id, :year, :month, :day
     @o = @c.load(:id=>1, :year=>1, :month=>2, :day=>3)
-    MODEL_DB.reset
+    DB.reset
   end
   
   it ".composition should add compositions" do
@@ -48,7 +48,7 @@ describe "Composition plugin" do
     @c.composition :date, :composer=>proc{Date.new(year+1, month+2, day+3)}, :decomposer=>proc{[:year, :month, :day].each{|s| self.send("#{s}=", date.send(s) * 2)}}
     @o.date.should == Date.new(2, 4, 6)
     @o.save
-    sql = MODEL_DB.sqls.last
+    sql = DB.sqls.last
     sql.should include("year = 4")
     sql.should include("month = 8")
     sql.should include("day = 12")
@@ -90,13 +90,6 @@ describe "Composition plugin" do
     called.should == true
   end
 
-  it "should clear compositions cache when using set_values" do
-    @c.composition :date, :composer=>proc{}, :decomposer=>proc{}
-    @o.date = Date.new(3, 4, 5)
-    @o.set_values(:id=>1)
-    @o.compositions.should == {}
-  end
-
   it "should clear compositions cache when refreshing" do
     @c.composition :date, :composer=>proc{}, :decomposer=>proc{}
     @o.date = Date.new(3, 4, 5)
@@ -104,16 +97,16 @@ describe "Composition plugin" do
     @o.compositions.should == {}
   end
 
-  it "should clear compositions cache when refreshing after save" do
+  it "should not clear compositions cache when refreshing after save" do
     @c.composition :date, :composer=>proc{}, :decomposer=>proc{}
-    @c.create(:date=>Date.new(3, 4, 5)).compositions.should == {}
+    @c.create(:date=>Date.new(3, 4, 5)).compositions.should == {:date=>Date.new(3, 4, 5)}
   end
 
-  it "should clear compositions cache when saving with insert_select" do
+  it "should not clear compositions cache when saving with insert_select" do
     def (@c.instance_dataset).supports_insert_select?() true end
     def (@c.instance_dataset).insert_select(*) {:id=>1} end
     @c.composition :date, :composer=>proc{}, :decomposer=>proc{}
-    @c.create(:date=>Date.new(3, 4, 5)).compositions.should == {}
+    @c.create(:date=>Date.new(3, 4, 5)).compositions.should == {:date=>Date.new(3, 4, 5)}
   end
 
   it "should instantiate compositions lazily" do
@@ -159,7 +152,7 @@ describe "Composition plugin" do
     @o.date.month.should == 6
     @o.date = c.new(3, 4)
     @o.save
-    sql = MODEL_DB.sqls.last
+    sql = DB.sqls.last
     sql.should include("year = 6")
     sql.should include("month = 12")
   end
@@ -181,7 +174,7 @@ describe "Composition plugin" do
     @o.date.m.should == 6
     @o.date = c.new(3, 4)
     @o.save
-    sql = MODEL_DB.sqls.last
+    sql = DB.sqls.last
     sql.should include("year = 6")
     sql.should include("month = 12")
   end
@@ -195,7 +188,7 @@ describe "Composition plugin" do
     @c.composition :date, :mapping=>[:year, :month, :day]
     @o.date = nil
     @o.save
-    sql = MODEL_DB.sqls.last
+    sql = DB.sqls.last
     sql.should include("year = NULL")
     sql.should include("month = NULL")
     sql.should include("day = NULL")
@@ -214,7 +207,7 @@ describe "Composition plugin" do
     o = c.load(:id=>1, :year=>1, :month=>2, :day=>3)
     o.date.should == Date.new(1, 2, 3)
     o.save
-    sql = MODEL_DB.sqls.last
+    sql = DB.sqls.last
     sql.should include("year = 1")
     sql.should include("month = 2")
     sql.should include("day = 3")

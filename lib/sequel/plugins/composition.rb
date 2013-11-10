@@ -90,7 +90,7 @@ module Sequel
         #     # for example y in the composition object represents year
         #     # in the model object.
         #     :mapping=>[[:year, :y], [:month, :m], [:day, :d]]
-        def composition(name, opts={})
+        def composition(name, opts=OPTS)
           opts = opts.dup
           compositions[name] = opts
           if mapping = opts[:mapping]
@@ -127,7 +127,7 @@ module Sequel
         Plugins.inherited_instance_variables(self, :@compositions=>:dup)
         
         # Define getter and setter methods for the composition object.
-        def define_composition_accessor(name, opts={})
+        def define_composition_accessor(name, opts=OPTS)
           include(@composition_module ||= Module.new) unless composition_module
           composer = opts[:composer]
           composition_module.class_eval do
@@ -149,12 +149,6 @@ module Sequel
       end
 
       module InstanceMethods
-        # Clear the cached compositions when setting values.
-        def set_values(hash)
-          @compositions.clear if @compositions
-          super
-        end
-
         # For each composition, set the columns in the model class based
         # on the composition object.
         def before_save
@@ -170,6 +164,14 @@ module Sequel
         # Freeze compositions hash when freezing model instance.
         def freeze
           compositions.freeze
+          super
+        end
+
+        private
+
+        # Clear the cached compositions when manually refreshing.
+        def _refresh_set_values(hash)
+          @compositions.clear if @compositions
           super
         end
       end

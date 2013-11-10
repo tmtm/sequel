@@ -36,53 +36,27 @@ module Sequel
       prepared_statement(ps_name).call(hash, &block)
     end
     
-    # Executes the given SQL on the database. This method should be overridden in descendants.
-    # This method should not be called directly by user code.
-    def execute(sql, opts={})
-      Sequel::Deprecation.deprecate('Database#execute default implementation and Sequel::NotImplemented', 'All database instances can be assumed to implement execute')
-      raise NotImplemented, "#execute should be overridden by adapters"
-    end
-    
     # Method that should be used when submitting any DDL (Data Definition
     # Language) SQL, such as +create_table+.  By default, calls +execute_dui+.
     # This method should not be called directly by user code.
-    def execute_ddl(sql, opts={}, &block)
+    def execute_ddl(sql, opts=OPTS, &block)
       execute_dui(sql, opts, &block)
     end
 
     # Method that should be used when issuing a DELETE, UPDATE, or INSERT
     # statement.  By default, calls execute.
     # This method should not be called directly by user code.
-    def execute_dui(sql, opts={}, &block)
+    def execute_dui(sql, opts=OPTS, &block)
       execute(sql, opts, &block)
     end
 
     # Method that should be used when issuing a INSERT
     # statement.  By default, calls execute_dui.
     # This method should not be called directly by user code.
-    def execute_insert(sql, opts={}, &block)
+    def execute_insert(sql, opts=OPTS, &block)
       execute_dui(sql, opts, &block)
     end
 
-    # Returns an array of hashes containing foreign key information from the
-    # table.  Each hash will contain at least the following fields:
-    #
-    # :columns :: An array of columns in the given table
-    # :table :: The table referenced by the columns
-    # :key :: An array of columns referenced (in the table specified by :table),
-    #         but can be nil on certain adapters if the primary key is referenced.
-    #
-    # The hash may also contain entries for:
-    #
-    # :deferrable :: Whether the constraint is deferrable
-    # :name :: The name of the constraint
-    # :on_delete :: The action to take ON DELETE
-    # :on_update :: The action to take ON UPDATE
-    def foreign_key_list(table, opts={})
-      Sequel::Deprecation.deprecate('Database#foreign_key_list default implementation and Sequel::NotImplemented', 'Use Database#supports_foreign_key_parsing? to check for support')
-      raise NotImplemented, "#foreign_key_list should be overridden by adapters"
-    end
-    
     # Returns a single value from the database, e.g.:
     #
     #   DB.get(1) # SELECT 1
@@ -92,26 +66,12 @@ module Sequel
       @default_dataset.get(*args, &block)
     end
     
-    # Return a hash containing index information for the table. Hash keys are index name symbols.
-    # Values are subhashes with two keys, :columns and :unique.  The value of :columns
-    # is an array of symbols of column names.  The value of :unique is true or false
-    # depending on if the index is unique.
-    #
-    # Should not include the primary key index, functional indexes, or partial indexes.
-    #
-    #   DB.indexes(:artists)
-    #   # => {:artists_name_ukey=>{:columns=>[:name], :unique=>true}}
-    def indexes(table, opts={})
-      Sequel::Deprecation.deprecate('Database#indexes default implementation and Sequel::NotImplemented', 'Use Database#supports_index_parsing? to check for support')
-      raise NotImplemented, "#indexes should be overridden by adapters"
-    end
-    
     # Runs the supplied SQL statement string on the database server. Returns nil.
     # Options:
     # :server :: The server to run the SQL on.
     #
     #   DB.run("SET some_server_variable = 42")
-    def run(sql, opts={})
+    def run(sql, opts=OPTS)
       execute_ddl(sql, opts)
       nil
     end
@@ -156,7 +116,7 @@ module Sequel
     #   #    :ruby_default=>nil,
     #   #    :db_type=>"text",
     #   #    :allow_null=>false}]]
-    def schema(table, opts={})
+    def schema(table, opts=OPTS)
       raise(Error, 'schema parsing is not implemented on this database') unless supports_schema_parsing?
 
       opts = opts.dup
@@ -218,22 +178,6 @@ module Sequel
       false
     end
 
-    # Return all tables in the database as an array of symbols.
-    #
-    #   DB.tables # => [:albums, :artists]
-    def tables(opts={})
-      Sequel::Deprecation.deprecate('Database#tables default implementation and Sequel::NotImplemented', 'Use Database#supports_table_listing? to check for support')
-      raise NotImplemented, "#tables should be overridden by adapters"
-    end
-    
-    # Return all views in the database as an array of symbols.
-    #
-    #   DB.views # => [:gold_albums, :artists_with_many_albums]
-    def views(opts={})
-      Sequel::Deprecation.deprecate('Database#views default implementation and Sequel::NotImplemented', 'Use Database#supports_view_listing? to check for support')
-      raise NotImplemented, "#views should be overridden by adapters"
-    end
-    
     private
     
     # Should raise an error if the table doesn't not exist,

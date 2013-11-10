@@ -14,15 +14,15 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
 
   # The following additional options are respected:
   # * :connection_handling - Set how to handle available connections.  By default,
-  #   uses a a stack for performance.  Can be set to :queue to use a queue, which reduces
-  #   the chances of connections becoming stale.
+  #   uses a a queue for fairness.  Can be set to :stack to use a stack, which may
+  #   offer better performance.
   # * :max_connections - The maximum number of connections the connection pool
   #   will open (default 4)
   # * :pool_sleep_time - The amount of time to sleep before attempting to acquire
   #   a connection again (default 0.001)
   # * :pool_timeout - The amount of seconds to wait to acquire a connection
   #   before raising a PoolTimeoutError (default 5)
-  def initialize(db, opts = {})
+  def initialize(db, opts = OPTS)
     super
     @max_size = Integer(opts[:max_connections] || 4)
     raise(Sequel::Error, ':max_connections must be positive') if @max_size < 1
@@ -64,7 +64,7 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
   # 
   # Once a connection is requested using #hold, the connection pool
   # creates new connections to the database.
-  def disconnect(opts={})
+  def disconnect(opts=OPTS)
     sync do
       @available_connections.each{|conn| db.disconnect_connection(conn)}
       @available_connections.clear
@@ -163,10 +163,10 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
   # have the mutex before calling this.
   def next_available
     case @connection_handling
-    when :queue
-      @available_connections.shift
-    else
+    when :stack
       @available_connections.pop
+    else
+      @available_connections.shift
     end
   end
 

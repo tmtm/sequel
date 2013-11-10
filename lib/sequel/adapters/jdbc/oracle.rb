@@ -27,6 +27,10 @@ module Sequel
           false
         end
 
+        def disconnect_error?(exception, opts)
+          super || exception.message =~ /\AClosed Connection/
+        end
+
         def last_insert_id(conn, opts)
           unless sequence = opts[:sequence]
             if t = opts[:table]
@@ -105,7 +109,7 @@ module Sequel
         end
       
         def convert_type_oracle_timestamptz(v)
-          convert_type_oracle_timestamp(db.synchronize{|c| v.timestampValue(c)})
+          convert_type_oracle_timestamp(db.synchronize(@opts[:server]){|c| v.timestampValue(c)})
         end
       
         def convert_type_proc(v)

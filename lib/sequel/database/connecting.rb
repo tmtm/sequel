@@ -45,7 +45,7 @@ module Sequel
     end
     
     # Connects to a database.  See Sequel.connect.
-    def self.connect(conn_string, opts = {})
+    def self.connect(conn_string, opts = OPTS)
       case conn_string
       when String
         if match = /\A(jdbc|do):/o.match(conn_string)
@@ -138,12 +138,6 @@ module Sequel
       end
     end
 
-    # Connects to the database. This method should be overridden by descendants.
-    def connect(server)
-      Sequel::Deprecation.deprecate('Database#connect default implementation and Sequel::NotImplemented', 'All database instance can be assumed to implement connect.')
-      raise NotImplemented, "#connect should be overridden by adapters"
-    end
-    
     # The database type for this database object, the same as the adapter scheme
     # by default.  Should be overridden in adapters (especially shared adapters)
     # to be the correct type, so that even if two separate Database objects are
@@ -167,7 +161,7 @@ module Sequel
     #   DB.disconnect # All servers
     #   DB.disconnect(:servers=>:server1) # Single server
     #   DB.disconnect(:servers=>[:server1, :server2]) # Multiple servers
-    def disconnect(opts = {})
+    def disconnect(opts = OPTS)
       pool.disconnect(opts)
     end
 

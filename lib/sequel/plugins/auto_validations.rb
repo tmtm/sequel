@@ -43,7 +43,7 @@ module Sequel
     #   # Make the Album class use auto validations
     #   Album.plugin :auto_validations
     module AutoValidations
-      def self.apply(model, opts={})
+      def self.apply(model, opts=OPTS)
         model.instance_eval do
           plugin :validation_helpers
           @auto_validate_presence = false
@@ -55,7 +55,7 @@ module Sequel
       end
 
       # Setup auto validations for the model if it has a dataset.
-      def self.configure(model, opts={})
+      def self.configure(model, opts=OPTS)
         model.instance_eval do
           setup_auto_validations if @dataset
           if opts[:not_null] == :presence
@@ -76,12 +76,6 @@ module Sequel
 
         Plugins.inherited_instance_variables(self, :@auto_validate_presence=>nil, :@auto_validate_types=>nil, :@auto_validate_not_null_columns=>:dup, :@auto_validate_explicit_not_null_columns=>:dup, :@auto_validate_unique_columns=>:dup)
         Plugins.after_set_dataset(self, :setup_auto_validations)
-
-        # REMOVE40
-        def auto_validate_presence_columns
-          Sequel::Deprecation.deprecate('Model.auto_validate_presence_columns', 'Please switch to auto_validate_not_null_columns')
-          auto_validate_not_null_columns
-        end
 
         # Whether to use a presence validation for not null columns
         def auto_validate_presence?

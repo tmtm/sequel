@@ -75,7 +75,7 @@ module Sequel
 
       # Return the array of foreign key info hashes using the foreign_key_list PRAGMA,
       # including information for the :on_update and :on_delete entries.
-      def foreign_key_list(table, opts={})
+      def foreign_key_list(table, opts=OPTS)
         m = output_identifier_meth
         h = {}
         metadata_dataset.with_sql("PRAGMA foreign_key_list(?)", input_identifier_meth.call(table)).each do |row|
@@ -90,7 +90,7 @@ module Sequel
       end
 
       # Use the index_list and index_info PRAGMAs to determine the indexes on the table.
-      def indexes(table, opts={})
+      def indexes(table, opts=OPTS)
         m = output_identifier_meth
         im = input_identifier_meth
         indexes = {}
@@ -121,7 +121,7 @@ module Sequel
 
       # Set the integer_booleans option using the passed in :integer_boolean option.
       def set_integer_booleans
-        @integer_booleans = typecast_value_boolean(@opts[:integer_booleans])
+        @integer_booleans = @opts.has_key?(:integer_booleans) ? typecast_value_boolean(@opts[:integer_booleans]) : true
       end
       
       # The version of the server as an integer, where 3.6.19 = 30619.
@@ -161,7 +161,7 @@ module Sequel
       # SQLite supports timezones in timestamps, since it just stores them as strings,
       # but it breaks the usage of SQLite's datetime functions.
       def use_timestamp_timezones?
-        defined?(@use_timestamp_timezones) ? @use_timestamp_timezones : (@use_timestamp_timezones = true)
+        defined?(@use_timestamp_timezones) ? @use_timestamp_timezones : (@use_timestamp_timezones = false)
       end
 
       # A symbol signifying the value of the synchronous PRAGMA.
@@ -180,7 +180,7 @@ module Sequel
       #
       # Options:
       # * :server - Set the server to use.
-      def tables(opts={})
+      def tables(opts=OPTS)
         tables_and_views(TABLES_FILTER, opts)
       end
       
@@ -200,7 +200,7 @@ module Sequel
       #
       # Options:
       # * :server - Set the server to use.
-      def views(opts={})
+      def views(opts=OPTS)
         tables_and_views(VIEWS_FILTER, opts)
       end
 
@@ -282,7 +282,7 @@ module Sequel
       end
 
       # A name to use for the backup table
-      def backup_table_name(table, opts={})
+      def backup_table_name(table, opts=OPTS)
         table = table.gsub('`', '')
         (opts[:times]||1000).times do |i|
           table_name = "#{table}_backup#{i}"
@@ -346,7 +346,7 @@ module Sequel
       # Duplicate an existing table by creating a new table, copying all records
       # from the existing table into the new table, deleting the existing table
       # and renaming the new table to the existing table's name.
-      def duplicate_table(table, opts={})
+      def duplicate_table(table, opts=OPTS)
         remove_cached_schema(table)
         def_columns = defined_columns_for(table)
         old_columns = def_columns.map{|c| c[:name]}
@@ -435,7 +435,7 @@ module Sequel
           row.delete(:cid)
           row[:allow_null] = row.delete(:notnull).to_i == 0
           row[:default] = row.delete(:dflt_value)
-          row[:primary_key] = row.delete(:pk).to_i == 1
+          row[:primary_key] = row.delete(:pk).to_i > 0
           row[:default] = nil if blank_object?(row[:default]) || row[:default] == 'NULL'
           row[:db_type] = row.delete(:type)
           row[:type] = schema_column_type(row[:db_type])

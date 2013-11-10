@@ -14,10 +14,8 @@ module Sequel
     #   DB[:table].add_graph_aliases(:some_alias=>[:table, :column])
     #   # SELECT ..., table.column AS some_alias
     def add_graph_aliases(graph_aliases)
-      unless ga = opts[:graph_aliases]
-        unless opts[:graph] && (ga = opts[:graph][:column_aliases])
-          Sequel::Deprecation.deprecate('Calling Dataset#add_graph_aliases before #graph or #set_graph_aliases', 'Please call it after #graph or #set_graph_aliases')
-        end
+      unless (ga = opts[:graph_aliases]) || (opts[:graph] && (ga = opts[:graph][:column_aliases]))
+        raise Error, "cannot call add_graph_aliases on a dataset that has not been called with graph or set_graph_aliases"
       end
       columns, graph_aliases = graph_alias_columns(graph_aliases)
       select_more(*columns).clone(:graph_aliases => ga.merge(graph_aliases))
@@ -48,7 +46,7 @@ module Sequel
     # :table_alias :: The alias to use for the table.  If not specified, doesn't
     #                 alias the table.  You will get an error if the the alias (or table) name is
     #                 used more than once.
-    def graph(dataset, join_conditions = nil, options = {}, &block)
+    def graph(dataset, join_conditions = nil, options = OPTS, &block)
       # Allow the use of a dataset or symbol as the first argument
       # Find the table name/dataset based on the argument
       table_alias = options[:table_alias]
@@ -231,48 +229,6 @@ module Sequel
         identifier
       end
       [identifiers, gas]
-    end
-
-    # Fetch the rows, split them into component table parts,
-    # tranform and run the row_proc on each part (if applicable),
-    # and yield a hash of the parts.
-    def graph_each
-      Sequel::Deprecation.deprecate('Dataset#graph_each', 'Load the graph_each extension if you want to continue using it')
-      # Reject tables with nil datasets, as they are excluded from
-      # the result set
-      datasets = @opts[:graph][:table_aliases].to_a.reject{|ta,ds| ds.nil?}
-      # Get just the list of table aliases into a local variable, for speed
-      table_aliases = datasets.collect{|ta,ds| ta}
-      # Get an array of arrays, one for each dataset, with
-      # the necessary information about each dataset, for speed
-      datasets = datasets.collect{|ta, ds| [ta, ds, ds.row_proc]}
-      # Use the manually set graph aliases, if any, otherwise
-      # use the ones automatically created by .graph
-      column_aliases = @opts[:graph_aliases] || @opts[:graph][:column_aliases]
-      fetch_rows(select_sql) do |r|
-        graph = {}
-        # Create the sub hashes, one per table
-        table_aliases.each{|ta| graph[ta]={}}
-        # Split the result set based on the column aliases
-        # If there are columns in the result set that are
-        # not in column_aliases, they are ignored
-        column_aliases.each do |col_alias, tc|
-          ta, column = tc
-          graph[ta][column] = r[col_alias]
-        end
-        # For each dataset run the row_proc if applicable
-        datasets.each do |ta,ds,rp|
-          g = graph[ta]
-          graph[ta] = if g.values.any?{|x| !x.nil?}
-            rp ? rp.call(g) : g
-          else
-            nil
-          end
-        end
-
-        yield graph
-      end
-      self
     end
   end
 end

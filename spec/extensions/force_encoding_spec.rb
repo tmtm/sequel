@@ -83,7 +83,7 @@ describe "force_encoding plugin" do
   
   specify "should work when saving new model instances" do
     o = @c.new
-    ds = MODEL_DB[:a]
+    ds = DB[:a]
     def ds.first
       s = 'blah'
       s.force_encoding('US-ASCII')
@@ -97,7 +97,7 @@ describe "force_encoding plugin" do
   
   specify "should work when refreshing model instances" do
     o = @c.load(:id=>1, :x=>'as')
-    ds = MODEL_DB[:a]
+    ds = DB[:a]
     def ds.first
       s = 'blah'
       s.force_encoding('US-ASCII')
@@ -107,22 +107,6 @@ describe "force_encoding plugin" do
     o.refresh
     o.x.should == 'blah'
     o.x.encoding.should == @e1
-  end
-  
-  specify "should work when used with the identity_map plugin if the identity_map plugin is setup first" do
-    @c = Class.new(Sequel::Model) do
-    end
-    @c.columns :id, :x
-    @c.plugin :identity_map
-    @c.plugin :force_encoding, 'UTF-8'
-    @c.with_identity_map do
-      o = @c.load(:id=>1)
-      s = 'blah'
-      s.force_encoding('US-ASCII')
-      @c.load(:id=>1, :x=>s)
-      o.x.should == 'blah'
-      o.x.encoding.should == @e1
-    end
   end
 end 
 else

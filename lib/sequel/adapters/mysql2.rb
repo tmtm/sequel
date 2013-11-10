@@ -51,12 +51,12 @@ module Sequel
       end
 
       # Return the number of matched rows when executing a delete/update statement.
-      def execute_dui(sql, opts={})
+      def execute_dui(sql, opts=OPTS)
         execute(sql, opts){|c| return c.affected_rows}
       end
 
       # Return the last inserted id when executing an insert statement.
-      def execute_insert(sql, opts={})
+      def execute_insert(sql, opts=OPTS)
         execute(sql, opts){|c| return c.last_id}
       end
 
@@ -155,13 +155,13 @@ module Sequel
       end
 
       # Set the :type option to :select if it hasn't been set.
-      def execute(sql, opts={}, &block)
+      def execute(sql, opts=OPTS, &block)
         super(sql, {:type=>:select}.merge(opts), &block)
       end
 
       # Handle correct quoting of strings using ::Mysql2::Client#escape.
       def literal_string_append(sql, v)
-        sql << "'" << db.synchronize{|c| c.escape(v)} << "'"
+        sql << APOS << db.synchronize(@opts[:server]){|c| c.escape(v)} << APOS
       end
     end
   end

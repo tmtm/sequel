@@ -12,16 +12,6 @@ module Sequel
       # (default: not set, so all columns not otherwise restricted are allowed).
       attr_reader :allowed_columns
 
-      # REMOVE40
-      def cache_anonymous_models
-        Sequel::Deprecation.deprecate('Model.cache_anonymous_models', 'Please switch to Sequel.cache_anonymous_models')
-        Sequel.cache_anonymous_models
-      end
-      def cache_anonymous_models=(v)
-        Sequel::Deprecation.deprecate('Model.cache_anonymous_models=', 'Please switch to Sequel.cache_anonymous_models=')
-        Sequel.cache_anonymous_models = v
-      end
-  
       # Array of modules that extend this model's dataset.  Stored
       # so that if the model's dataset is changed, it will be extended
       # with all of these modules.
@@ -67,15 +57,6 @@ module Sequel
       # a model instance does not modify exactly 1 row.  If set to false,
       # Sequel will not check the number of rows modified (default: true).
       attr_accessor :require_modification
-  
-      # REMOVE40
-      def restricted_columns
-        Sequel::Deprecation.deprecate('Model.restricted_columns', 'Please load the blacklist_security plugin to continue using it')
-        @restricted_columns
-      end
-      def _restricted_columns
-        @restricted_columns
-      end
   
       # Should be the literal primary key column name if this Model's table has a simple primary key, or
       # nil if the model has a compound primary key or no primary key.
@@ -135,8 +116,7 @@ module Sequel
       # probably should not be used by external code.
       def call(values)
         o = allocate
-        o.set_values(values)
-        o.after_initialize
+        o.instance_variable_set(:@values, values)
         o
       end
       
@@ -351,8 +331,6 @@ module Sequel
       # may contain setter methods.
       def include(mod)
         clear_setter_methods_cache
-        check_deprecated_after_initialize(mod.instance_methods) unless allowed_after_initialize_implementation?(mod)
-        Sequel::Deprecation.deprecate('Model#set_values', 'Please override Model.call, Model#_refresh_set_values, and/or Model#_create_set_values depending on the type of behavior you want to change') if mod.public_instance_methods.map{|x| x.to_s}.include?('set_values') && mod.name.to_s !~ /\ASequel::(Model|Model::Associations|Plugins::(ForceEncoding|Serialization|TypecastOnLoad|Composition|PreparedStatementsSafe|Dirty|PgTypecastOnLoad))::InstanceMethods\z/
         super
       end
 
@@ -416,8 +394,6 @@ module Sequel
       # Clear the setter_methods cache when a setter method is added
       def method_added(meth)
         clear_setter_methods_cache if meth.to_s =~ SETTER_METHOD_REGEXP
-        check_deprecated_after_initialize(meth)
-        Sequel::Deprecation.deprecate('Model#set_values', 'Please override Model.call, Model#_refresh_set_values, and/or Model#_create_set_values depending on the type of behavior you want to change') if meth.to_s == 'set_values'
         super
       end
   
@@ -442,19 +418,10 @@ module Sequel
         unless @plugins.include?(m)
           @plugins << m
           m.apply(self, *args, &block) if m.respond_to?(:apply)
+          extend(m::ClassMethods) if plugin_module_defined?(m, :ClassMethods)
           include(m::InstanceMethods) if plugin_module_defined?(m, :InstanceMethods)
-          extend(m::ClassMethods)if plugin_module_defined?(m, :ClassMethods)
           if plugin_module_defined?(m, :DatasetMethods)
             dataset_extend(m::DatasetMethods, :create_class_methods=>false)
-            # REMOVE40
-            m::DatasetMethods.public_instance_methods.each do |meth|
-              unless respond_to?(meth, true)
-                (class << self; self; end).send(:define_method, meth) do |*args, &block|
-                  Sequel::Deprecation.deprecate('Automatically defining Model class methods for plugin public dataset methods', "Please modify the plugin to use Plugins.def_dataset_method for #{meth}")
-                  dataset.send(meth, *args, &block)
-                end
-              end
-            end
           end
         end
         m.configure(self, *args, &block) if m.respond_to?(:configure)
@@ -543,7 +510,7 @@ module Sequel
       # Note that you should not use this to change the model's dataset
       # at runtime.  If you have that need, you should look into Sequel's
       # sharding support.
-      def set_dataset(ds, opts={})
+      def set_dataset(ds, opts=OPTS)
         inherited = opts[:inherited]
         case ds
         when Symbol, SQL::Identifier, SQL::QualifiedIdentifier, SQL::AliasedExpression, LiteralString
@@ -588,51 +555,22 @@ module Sequel
       #     # composite key
       #     set_primary_key [:taggable_id, :tag_id]
       #   end
-      def set_primary_key(*key)
-        Sequel::Deprecation.deprecate('Calling set_primary_key without arguments is deprecated and will raise an exception in Sequel 4. Please use no_primary_key to mark the model as not having a primary key.') if key.length == 0
-        Sequel::Deprecation.deprecate('Calling set_primary_key with multiple arguments is deprecated and will raise an exception in Sequel 4. Please pass an array of keys to setup a composite primary key.') if key.length > 1
-        
+      def set_primary_key(key)
         clear_setter_methods_cache
-        key = key.flatten
-        self.simple_pk = if key.length == 1
-          (@dataset || db).literal(key.first)
-        else 
-          nil 
+        if key.is_a?(Array) && key.length < 2
+          key = key.first
         end
-        @primary_key = (key.length == 1) ? key[0] : key
+        self.simple_pk = if key && !key.is_a?(Array)
+          (@dataset || db).literal(key)
+        end
+        @primary_key = key
       end
   
-      # Set the columns to restrict when using mass assignment (e.g. +set+).  Using this means that
-      # attempts to call setter methods for the columns listed here will cause an
-      # exception or be silently skipped (based on the +strict_param_setting+ setting).
-      # If you have any virtual setter methods (methods that end in =) that you
-      # want not to be used during mass assignment, they need to be listed here as well (without the =).
-      #
-      # It's generally a bad idea to rely on a blacklist approach for security.  Using a whitelist
-      # approach such as set_allowed_columns or the instance level set_only or set_fields methods
-      # is usually a better choice.  So use of this method is generally a bad idea.
-      #
-      #   Artist.set_restricted_columns(:records_sold)
-      #   Artist.set(:name=>'Bob', :hometown=>'Sactown') # No Error
-      #   Artist.set(:name=>'Bob', :records_sold=>30000) # Error
-      def set_restricted_columns(*cols)
-        clear_setter_methods_cache
-        Sequel::Deprecation.deprecate('Model.set_restricted_columns', 'Please switch to Model.set_allowed_columns or use the blacklist_security plugin')
-        @restricted_columns = cols
-      end
-
       # Cache of setter methods to allow by default, in order to speed up new/set/update instance methods.
       def setter_methods
-        @setter_methods ||= if allowed_columns
-          allowed_columns.map{|x| "#{x}="}
-        else
-          meths = instance_methods.collect{|x| x.to_s}.grep(SETTER_METHOD_REGEXP) - RESTRICTED_SETTER_METHODS
-          meths -= Array(primary_key).map{|x| "#{x}="} if primary_key && restrict_primary_key?
-          meths -= _restricted_columns.map{|x| "#{x}="} if _restricted_columns
-          meths
-        end
+        @setter_methods ||= get_setter_methods
       end
-  
+
       # Sets up a dataset method that returns a filtered dataset.
       # Sometimes thought of as a scope, and like most dataset methods,
       # they can be chained.
@@ -692,24 +630,6 @@ module Sequel
   
       # Add model methods that call dataset methods
       Plugins.def_dataset_methods(self, DATASET_METHODS)
-
-      # REMOVE40
-      %w'print each_page set add_graph_aliases insert_multiple query set_overrides set_defaults to_csv paginate'.each do |meth|
-        class_eval(<<-END, __FILE__, __LINE__+1)
-          def #{meth}(*args, &block)
-            Sequel::Deprecation.deprecate('Model.#{meth}', 'Please use Model.dataset.#{meth} instead')
-            dataset.#{meth}(*args, &block)
-          end
-        END
-      end
-      %w'destroy delete update'.each do |meth|
-        class_eval(<<-END, __FILE__, __LINE__+1)
-          def #{meth}(*args, &block)
-            Sequel::Deprecation.deprecate('Model.#{meth}', 'Please use the scissors plugin or Model.dataset.#{meth} instead')
-            dataset.#{meth}(*args, &block)
-          end
-        END
-      end
   
       private
       
@@ -724,22 +644,10 @@ module Sequel
         end
       end
 
-      # REMOVE40
-      def allowed_after_initialize_implementation?(mod)
-        mod == InstanceMethods || mod.to_s == 'Sequel::Plugins::HookClassMethods::InstanceMethods'
-      end
-  
-      # REMOVE40
-      def check_deprecated_after_initialize(meths)
-        Array(meths).each do |meth|
-          Sequel::Deprecation.deprecate('The Model after_initialize hook', 'Please use the after_initialize plugin to continue using the hook') if meth.to_s == 'after_initialize'
-        end
-      end
-
       # Add the module to the class's dataset_method_modules.  Extend the dataset with the
       # module if the model has a dataset.  Add dataset methods to the class for all
       # public dataset methods.
-      def dataset_extend(mod, opts={})
+      def dataset_extend(mod, opts=OPTS)
         @dataset.extend(mod) if @dataset
         reset_instance_dataset
         dataset_method_modules << mod
@@ -827,6 +735,18 @@ module Sequel
         schema_hash
       end
       
+      # Uncached version of setter_methods, to be overridden by plugins
+      # that want to modify the methods used.
+      def get_setter_methods
+        if allowed_columns
+          allowed_columns.map{|x| "#{x}="}
+        else
+          meths = instance_methods.collect{|x| x.to_s}.grep(SETTER_METHOD_REGEXP) - RESTRICTED_SETTER_METHODS
+          meths -= Array(primary_key).map{|x| "#{x}="} if primary_key && restrict_primary_key?
+          meths
+        end
+      end
+  
       # A hash of instance variables to automatically set up in subclasses.
       # See Sequel::Model::INHERITED_INSTANCE_VARIABLES.  It is safe to modify
       # the hash returned by this method, though it may not be safe to modify
@@ -971,18 +891,6 @@ module Sequel
       HOOKS.each{|h| class_eval("def #{h}; end", __FILE__, __LINE__)}
       AROUND_HOOKS.each{|h| class_eval("def #{h}; yield end", __FILE__, __LINE__)}
 
-      # REMOVE40
-      def self.class_attr_overridable(*meths) # :nodoc:
-        Sequel::Deprecation.deprecate('Model::InstanceMethods.class_attr_overridable', "There is no replacement planned")
-        meths.each{|meth| class_eval("def #{meth}; !defined?(@#{meth}) ? (frozen? ? self.class.#{meth} : (@#{meth} = self.class.#{meth})) : @#{meth} end", __FILE__, __LINE__)}
-        attr_writer(*meths) 
-      end 
-      def self.class_attr_reader(*meths) # :nodoc:
-        Sequel::Deprecation.deprecate('Model::InstanceMethods.class_attr_reader', "There is no replacement planned")
-        meths.each{|meth| class_eval("def #{meth}; self.class.#{meth} end", __FILE__, __LINE__)}
-      end
-      private_class_method :class_attr_overridable, :class_attr_reader
-
       # Define instance method(s) that calls class method(s) of the
       # same name. Replaces the construct:
       #   
@@ -1006,8 +914,6 @@ module Sequel
       # Creates new instance and passes the given values to set.
       # If a block is given, yield the instance to the block unless
       # from_db is true.
-      # This method runs the after_initialize hook after
-      # it has optionally yielded itself to the block.
       #
       # Arguments:
       # values :: should be a hash to pass to set. 
@@ -1018,19 +924,13 @@ module Sequel
       #   Artist.new do |a|
       #     a.name = 'Bob'
       #   end
-      def initialize(values = {}, from_db = false)
-        if from_db
-          Sequel::Deprecation.deprecate('Passing two arguments to Model.new', 'Please use Model.call instead')
-          set_values(values)
-        else
-          @values = {}
-          @new = true
-          @modified = true
-          initialize_set(values)
-          changed_columns.clear 
-          yield self if block_given?
-        end
-        after_initialize
+      def initialize(values = {})
+        @values = {}
+        @new = true
+        @modified = true
+        initialize_set(values)
+        changed_columns.clear 
+        yield self if block_given?
       end
       
       # Returns value of the column's attribute.
@@ -1121,7 +1021,7 @@ module Sequel
       #
       #   Artist[1].destroy # BEGIN; DELETE FROM artists WHERE (id = 1); COMMIT;
       #   # => #<Artist {:id=>1, ...}>
-      def destroy(opts = {})
+      def destroy(opts = OPTS)
         raise Sequel::Error, "can't destroy frozen object" if frozen?
         checked_save_failure(opts){checked_transaction(opts){_destroy(opts)}}
       end
@@ -1373,13 +1273,8 @@ module Sequel
       # :transaction :: set to true or false to override the current
       #                 +use_transactions+ setting
       # :validate :: set to false to skip validation
-      def save(*columns)
+      def save(opts=OPTS)
         raise Sequel::Error, "can't save frozen object" if frozen?
-        opts = columns.last.is_a?(Hash) ? columns.pop : {}
-
-        Sequel::Deprecation.deprecate('Passing columns as separate arguments to Model#save', 'Instead, provide a :columns option with the array of columns to save.') unless columns.empty?
-        columns.concat(Array(opts[:columns])) if opts[:columns]
-
         set_server(opts[:server]) if opts[:server] 
         if opts[:validate] != false
           unless checked_save_failure(opts){_valid?(true, opts)}
@@ -1387,7 +1282,7 @@ module Sequel
             return
           end
         end
-        checked_save_failure(opts){checked_transaction(opts){_save(columns, opts)}}
+        checked_save_failure(opts){checked_transaction(opts){_save(opts)}}
       end
 
       # Saves only changed columns if the object has been modified.
@@ -1399,7 +1294,7 @@ module Sequel
       #   a.name = 'Jim'
       #   a.save_changes # UPDATE artists SET name = 'Bob' WHERE (id = 1)
       #   # => #<Artist {:id=>1, :name=>'Jim', ...}
-      def save_changes(opts={})
+      def save_changes(opts=OPTS)
         save(opts.merge(:changed=>true)) || false if modified? 
       end
   
@@ -1411,7 +1306,7 @@ module Sequel
       #   artist.set(:name=>'Jim')
       #   artist.name # => 'Jim'
       def set(hash)
-        set_restricted(hash, nil, nil)
+        set_restricted(hash, :default)
       end
   
       # Set all values using the entries in the hash, ignoring any setting of
@@ -1421,18 +1316,7 @@ module Sequel
       #   artist.set_all(:name=>'Jim')
       #   artist.name # => 'Jim'
       def set_all(hash)
-        set_restricted(hash, false, false)
-      end
-  
-      # Set all values using the entries in the hash, except for the keys
-      # given in except.  You should probably use +set_fields+ or +set_only+
-      # instead of this method, as blacklist approaches to security are a bad idea.
-      #
-      #   artist.set_except({:name=>'Jim'}, :hometown)
-      #   artist.name # => 'Jim'
-      def set_except(hash, *except)
-        Sequel::Deprecation.deprecate('Model#set_except', 'Please switch to Model#set_only or use the blacklist_security plugin')
-        set_restricted(hash, false, except.flatten)
+        set_restricted(hash, :all)
       end
   
       # For each of the fields in the given array +fields+, call the setter
@@ -1502,7 +1386,7 @@ module Sequel
       #
       #   artist.set_only({:hometown=>'LA'}, :name) # Raise Error
       def set_only(hash, *only)
-        set_restricted(hash, only.flatten, false)
+        set_restricted(hash, only.flatten)
       end
   
       # Set the shard that this object is tied to.  Returns self.
@@ -1512,10 +1396,9 @@ module Sequel
         self
       end
 
-      # Replace the current values with hash.  Should definitely not be
-      # used with untrusted input, and should probably not be called
-      # directly by user code.
+      # REMOVE41
       def set_values(hash)
+        Sequel::Deprecation.deprecate('Model#set_values is deprecreated and will be removed in Sequel 4.1.  Please use _refresh_set_values or _save_set_values or set the values directly.')
         @values = hash
       end
       
@@ -1537,7 +1420,7 @@ module Sequel
       #
       #   artist.update(:name=>'Jim') # UPDATE artists SET name = 'Jim' WHERE (id = 1)
       def update(hash)
-        update_restricted(hash, nil, nil)
+        update_restricted(hash, :default)
       end
   
       # Update all values using the entries in the hash, ignoring any setting of
@@ -1546,17 +1429,7 @@ module Sequel
       #   Artist.set_allowed_columns(:num_albums)
       #   artist.update_all(:name=>'Jim') # UPDATE artists SET name = 'Jim' WHERE (id = 1)
       def update_all(hash)
-        update_restricted(hash, false, false)
-      end
-  
-      # Update all values using the entries in the hash, except for the keys
-      # given in except.  You should probably use +update_fields+ or +update_only+
-      # instead of this method, as blacklist approaches to security are a bad idea.
-      #
-      #   artist.update_except({:name=>'Jim'}, :hometown) # UPDATE artists SET name = 'Jim' WHERE (id = 1)
-      def update_except(hash, *except)
-        Sequel::Deprecation.deprecate('Model#update_except', 'Please switch to Model#update_only or use the blacklist_security plugin')
-        update_restricted(hash, false, except.flatten)
+        update_restricted(hash, :all)
       end
   
       # Update the instances values by calling +set_fields+ with the arguments, then
@@ -1581,7 +1454,7 @@ module Sequel
       #
       #   artist.update_only({:hometown=>'LA'}, :name) # Raise Error
       def update_only(hash, *only)
-        update_restricted(hash, only.flatten, false)
+        update_restricted(hash, only.flatten)
       end
       
       # Validates the object.  If the object is invalid, errors should be added
@@ -1598,7 +1471,7 @@ module Sequel
       #   artist(:name=>'Valid').valid? # => true
       #   artist(:name=>'Invalid').valid? # => false
       #   artist.errors.full_messages # => ['name cannot be Invalid']
-      def valid?(opts = {})
+      def valid?(opts = OPTS)
         _valid?(false, opts)
       end
 
@@ -1660,7 +1533,7 @@ module Sequel
       def _insert
         ds = _insert_dataset
         if !ds.opts[:select] and ds.supports_insert_select? and h = _insert_select_raw(ds)
-          set_values(h)
+          _save_set_values(h)
           nil
         else
           iid = _insert_raw(ds)
@@ -1692,7 +1565,7 @@ module Sequel
       # Refresh using a particular dataset, used inside save to make sure the same server
       # is used for reading newly inserted values from the database
       def _refresh(dataset)
-        set_values(_refresh_get(dataset) || raise(Error, "Record not found"))
+        _refresh_set_values(_refresh_get(dataset) || raise(Error, "Record not found"))
         changed_columns.clear
       end
 
@@ -1701,9 +1574,14 @@ module Sequel
         dataset.first
       end
       
+      # Set the refreshed values after 
+      def _refresh_set_values(h)
+        @values = h
+      end
+
       # Internal version of save, split from save to allow running inside
       # it's own transaction.
-      def _save(columns, opts)
+      def _save(opts)
         sh = {:server=>this_server}
         db.after_rollback(sh){after_rollback} if uacr = use_after_commit_rollback
         was_new = false
@@ -1730,7 +1608,8 @@ module Sequel
             around_update do
               called_cu = true
               raise_hook_failure(:before_update) if before_update == false
-              if columns.empty?
+              columns = opts[:columns]
+              if columns.nil?
                 @columns_updated = if opts[:changed]
                   @values.reject{|k,v| !changed_columns.include?(k)}
                 else
@@ -1738,6 +1617,7 @@ module Sequel
                 end
                 changed_columns.clear
               else # update only the specified columns
+                columns = Array(columns)
                 @columns_updated = @values.reject{|k, v| !columns.include?(k)}
                 changed_columns.reject!{|c| columns.include?(c)}
               end
@@ -1767,7 +1647,14 @@ module Sequel
       # default values of all columns.  Separated from _save so it
       # can be overridden to avoid the refresh.
       def _save_refresh
-        _refresh(this.opts[:server] ? this : this.server(:default))
+        _save_set_values(_refresh_get(this.opts[:server] ? this : this.server(:default)) || raise(Error, "Record not found"))
+        changed_columns.clear
+      end
+
+      # Set values to the provided hash.  Called after a create,
+      # to set the full values from the database in the model instance.
+      def _save_set_values(h)
+        @values = h
       end
 
       # Return a hash of values used when saving all columns of an
@@ -1858,7 +1745,7 @@ module Sequel
       end
       
       # If transactions should be used, wrap the yield in a transaction block.
-      def checked_transaction(opts={})
+      def checked_transaction(opts=OPTS)
         use_transaction?(opts) ? db.transaction({:server=>this_server}.merge(opts)){yield} : yield
       end
 
@@ -1907,14 +1794,11 @@ module Sequel
         end
       end
 
-      # Set the columns, filtered by the only and except arrays.
-      def set_restricted(hash, only, except)
+      # Call setter methods based on keys in hash, with the appropriate values.
+      # Restrict which methods can be called based on the provided type.
+      def set_restricted(hash, type)
         return self if hash.empty?
-        meths = if only.nil? && except.nil? && !@singleton_setter_added
-          model.setter_methods
-        else
-          setter_methods(only, except)
-        end
+        meths = setter_methods(type)
         strict = strict_param_setting
         hash.each do |k,v|
           m = "#{k}="
@@ -1936,31 +1820,24 @@ module Sequel
         self
       end
       
-      # Returns all methods that can be used for attribute
-      # assignment (those that end with =), modified by the only
-      # and except arguments:
+      # Returns all methods that can be used for attribute assignment (those that end with =),
+      # depending on the type:
       #
-      # * only
-      #   * false - Don't modify the results
-      #   * nil - if the model has allowed_columns, use only these, otherwise, don't modify
-      #   * Array - allow only the given methods to be used
-      # * except
-      #   * false - Don't modify the results
-      #   * nil - if the model has restricted_columns, remove these, otherwise, don't modify
-      #   * Array - remove the given methods
-      #
-      # only takes precedence over except, and if only is not used, certain methods are always
-      # restricted (RESTRICTED_SETTER_METHODS).  The primary key is restricted by default as
-      # well, see Model.unrestrict_primary_key to change this.
-      def setter_methods(only, except)
-        only = only.nil? ? model.allowed_columns : only
-        except = except.nil? ? model._restricted_columns : except
-        if only
-          only.map{|x| "#{x}="}
+      # :default :: Use the default methods allowed in th model class. 
+      # :all :: Allow setting all setters, except those specifically restricted (such as ==).
+      # Array :: Only allow setting of columns in the given array.
+      def setter_methods(type)
+        if type == :default
+          if !@singleton_setter_added || model.allowed_columns
+            return model.setter_methods
+          end
+        end
+
+        if type.is_a?(Array)
+          type.map{|x| "#{x}="}
         else
           meths = methods.collect{|x| x.to_s}.grep(SETTER_METHOD_REGEXP) - RESTRICTED_SETTER_METHODS
-          meths -= Array(primary_key).map{|x| "#{x}="} if primary_key && model.restrict_primary_key?
-          meths -= except.map{|x| "#{x}="} if except
+          meths -= Array(primary_key).map{|x| "#{x}="} if type != :all && primary_key && model.restrict_primary_key?
           meths
         end
       end
@@ -1992,8 +1869,8 @@ module Sequel
       end
   
       # Set the columns, filtered by the only and except arrays.
-      def update_restricted(hash, only, except)
-        set_restricted(hash, only, except)
+      def update_restricted(hash, type)
+        set_restricted(hash, type)
         save_changes
       end
 
@@ -2005,7 +1882,7 @@ module Sequel
       # Whether to use a transaction for this action.  If the :transaction
       # option is present in the hash, use that, otherwise, fallback to the
       # object's default (if set), or class's default (if not).
-      def use_transaction?(opts = {})
+      def use_transaction?(opts = OPTS)
         opts.fetch(:transaction, use_transactions)
       end
     end

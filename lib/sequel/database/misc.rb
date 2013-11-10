@@ -110,7 +110,7 @@ module Sequel
     # :sql_log_level :: Method to use to log SQL to a logger, :info by default.
     #
     # All options given are also passed to the connection pool.
-    def initialize(opts = {}, &block)
+    def initialize(opts = OPTS, &block)
       @opts ||= opts
       @opts = connection_pool_default_options.merge(@opts)
       @loggers = Array(@opts[:logger]) + Array(@opts[:loggers])
@@ -121,7 +121,6 @@ module Sequel
       
       @opts[:single_threaded] = @single_threaded = typecast_value_boolean(@opts.fetch(:single_threaded, Database.single_threaded))
       @schemas = {}
-      @default_schema = @opts.fetch(:default_schema, default_schema_default)
       @default_string_column_size = @opts[:default_string_column_size] || DEFAULT_STRING_COLUMN_SIZE
       @prepared_statements = {}
       @transactions = {}
@@ -150,7 +149,7 @@ module Sequel
     # in progress transaction commits (and only if it commits).
     # Options:
     # :server :: The server/shard to use.
-    def after_commit(opts={}, &block)
+    def after_commit(opts=OPTS, &block)
       raise Error, "must provide block to after_commit" unless block
       synchronize(opts[:server]) do |conn|
         if h = _trans(conn)
@@ -167,7 +166,7 @@ module Sequel
     # in progress transaction rolls back (and only if it rolls back).
     # Options:
     # :server :: The server/shard to use.
-    def after_rollback(opts={}, &block)
+    def after_rollback(opts=OPTS, &block)
       raise Error, "must provide block to after_rollback" unless block
       synchronize(opts[:server]) do |conn|
         if h = _trans(conn)
@@ -212,7 +211,7 @@ module Sequel
     # Return true if already in a transaction given the options,
     # false otherwise.  Respects the :server option for selecting
     # a shard.
-    def in_transaction?(opts={})
+    def in_transaction?(opts=OPTS)
       synchronize(opts[:server]){|conn| !!_trans(conn)}
     end
 
@@ -398,7 +397,7 @@ module Sequel
     
     # Convert the given exception to an appropriate Sequel::DatabaseError
     # subclass, keeping message and traceback.
-    def raise_error(exception, opts={})
+    def raise_error(exception, opts=OPTS)
       if !opts[:classes] || Array(opts[:classes]).any?{|c| exception.is_a?(c)}
         raise Sequel.convert_exception_class(exception, database_error_class(exception, opts))
       else
@@ -495,8 +494,7 @@ module Sequel
     def typecast_value_string(value)
       case value
       when Hash, Array
-        Sequel::Deprecation.deprecate('Automatically typecasting a hash or array to string for a string column', 'Either typecast the input manually or use the looser_typecasting extension')
-        value.to_s
+        raise Sequel::InvalidValue, "invalid value for String: #{value.inspect}"
       else
         value.to_s
       end

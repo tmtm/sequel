@@ -36,10 +36,6 @@ module Sequel
     #
     # The following general options are respected:
     #
-    # :disconnect :: If set to :retry, automatically sets the :retry_on option
-    #                with a Sequel::DatabaseDisconnectError.  This option is only
-    #                present for backwards compatibility, please use the :retry_on
-    #                option instead.
     # :isolation :: The transaction isolation level to use for this transaction,
     #               should be :uncommitted, :committed, :repeatable, or :serializable,
     #               used if given and the database/adapter supports customizable
@@ -72,13 +68,7 @@ module Sequel
     # :synchronous :: if non-nil, set synchronous_commit
     #                 appropriately.  Valid values true, :on, false, :off, :local (9.1+),
     #                 and :remote_write (9.2+).
-    def transaction(opts={}, &block)
-      if opts[:disconnect] == :retry
-        Sequel::Deprecation.deprecate('Database#transaction :disconnect=>:retry option', 'Please switch to :retry_on=>Sequel::DatabaseDisconnectError.')
-        raise(Error, 'cannot specify both :disconnect=>:retry and :retry_on') if opts[:retry_on]
-        return transaction(opts.merge(:retry_on=>Sequel::DatabaseDisconnectError, :disconnect=>nil), &block)
-      end
-
+    def transaction(opts=OPTS, &block)
       if retry_on = opts[:retry_on]
         num_retries = opts.fetch(:num_retries, 5)
         begin
@@ -96,7 +86,7 @@ module Sequel
         synchronize(opts[:server]) do |conn|
           if already_in_transaction?(conn, opts)
             if opts[:retrying]
-              raise Sequel::Error, "cannot set :disconnect=>:retry or :retry_on options if you are already inside a transaction"
+              raise Sequel::Error, "cannot set :retry_on options if you are already inside a transaction"
             end
             return yield(conn)
           end
@@ -111,7 +101,7 @@ module Sequel
     # block will cause the transaction to be rolled back.  If the exception is
     # not a Sequel::Rollback, the error will be reraised. If no exception occurs
     # inside the block, the transaction is commited.
-    def _transaction(conn, opts={})
+    def _transaction(conn, opts=OPTS)
       rollback = opts[:rollback]
       begin
         add_transaction(conn, opts)
@@ -207,7 +197,7 @@ module Sequel
     end
 
     # Start a new database transaction or a new savepoint on the given connection.
-    def begin_transaction(conn, opts={})
+    def begin_transaction(conn, opts=OPTS)
       if supports_savepoints?
         th = _trans(conn)
         if (depth = th[:savepoint_level]) > 0
@@ -266,7 +256,7 @@ module Sequel
     end
 
     # Commit the active transaction on the connection
-    def commit_transaction(conn, opts={})
+    def commit_transaction(conn, opts=OPTS)
       if supports_savepoints?
         depth = _trans(conn)[:savepoint_level]
         log_connection_execute(conn, depth > 1 ? commit_savepoint_sql(depth-1) : commit_transaction_sql)
@@ -307,7 +297,7 @@ module Sequel
     end
 
     # Rollback the active transaction on the connection
-    def rollback_transaction(conn, opts={})
+    def rollback_transaction(conn, opts=OPTS)
       if supports_savepoints?
         depth = _trans(conn)[:savepoint_level]
         log_connection_execute(conn, depth > 1 ? rollback_savepoint_sql(depth-1) : rollback_transaction_sql)
@@ -334,7 +324,7 @@ module Sequel
     end
 
     # Raise a database error unless the exception is an Rollback.
-    def transaction_error(e, opts={})
+    def transaction_error(e, opts=OPTS)
       if e.is_a?(Rollback)
         raise e if opts[:rollback] == :reraise
       else

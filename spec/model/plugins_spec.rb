@@ -115,7 +115,7 @@ describe Sequel::Model, ".plugin" do
     m.args.should == [[b, 123, {1=>2}], [b2, 234, {2=>3}]]
   end
   
-  it "should call things in the following order: apply, InstanceMethods, ClassMethods, DatasetMethods, configure" do
+  it "should call things in the following order: apply, ClassMethods, InstanceMethods, DatasetMethods, configure" do
     m = Module.new do
       @args = []
       def self.args; @args; end
@@ -144,9 +144,9 @@ describe Sequel::Model, ".plugin" do
     
     b = lambda{44}
     @c.plugin(m, 123, 1=>2, &b)
-    m.args.should == [:apply, :im, :cm, :dm, :configure]
+    m.args.should == [:apply, :cm, :im, :dm, :configure]
     @c.plugin(m, 234, 2=>3, &b)
-    m.args.should == [:apply, :im, :cm, :dm, :configure, :configure]
+    m.args.should == [:apply, :cm, :im, :dm, :configure, :configure]
   end
 
   it "should include an InstanceMethods module in the class if the plugin includes it" do
@@ -173,30 +173,16 @@ describe Sequel::Model, ".plugin" do
   it "should save the DatasetMethods module and apply it later if the class doesn't have a dataset" do
     c = Class.new(Sequel::Model)
     c.plugin @t
-    c.dataset = MODEL_DB[:i]
+    c.dataset = DB[:i]
     c.dataset.ghi.should == 345
   end
   
   it "should save the DatasetMethods module and apply it later if the class has a dataset" do
     @c.plugin @t
-    @c.dataset = MODEL_DB[:i]
+    @c.dataset = DB[:i]
     @c.dataset.ghi.should == 345
   end
 
-  qspecify "should define class methods for all public instance methods in DatasetMethod" do
-    m = Module.new do
-      self::DatasetMethods = Module.new do
-        def a; 1; end
-        def b; 2; end
-      end
-    end
-    @c.plugin m
-    @c.dataset.a.should == 1
-    @c.dataset.b.should == 2
-    @c.a.should == 1
-    @c.b.should == 2
-  end
-  
   it "should not define class methods for private instance methods in DatasetMethod" do
     m = Module.new do
       self::DatasetMethods = Module.new do

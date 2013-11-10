@@ -157,7 +157,7 @@ module Sequel
         #   :join_type :: The join type to use for the join, defaults to :left_outer.
         #   :only_conditions :: Conditions to use for the join instead of the ones specified by the keys.
         # * opts - The options for the associaion.  Takes the same options as many_to_many.
-        def many_through_many(name, through, opts={}, &block)
+        def many_through_many(name, through, opts=OPTS, &block)
           associate(:many_through_many, name, opts.merge(through.is_a?(Hash) ? through : {:through=>through}), &block)
         end
 
@@ -198,6 +198,7 @@ module Sequel
             ds.join(ft[:table],  Array(ft[:left]).zip(Array(ft[:right])) + opts.predicate_keys.zip(left_pks.map{|k| send(k)}), :table_alias=>ft[:alias], :qualify=>:deep)
           end
 
+          slice_range = opts.slice_range
           left_key_alias = opts[:left_key_alias] ||= opts.default_associated_key_alias
           opts[:eager_loader] ||= lambda do |eo|
             h = eo[:id_map]
@@ -208,17 +209,10 @@ module Sequel
             ft = opts.final_reverse_edge
             ds = ds.join(ft[:table], Array(ft[:left]).zip(Array(ft[:right])) + [[opts.predicate_key, h.keys]], :table_alias=>ft[:alias], :qualify=>:deep)
             ds = model.eager_loading_dataset(opts, ds, nil, eo[:associations], eo)
-            case opts.eager_limit_strategy
-            when :window_function
+            if opts.eager_limit_strategy == :window_function
               delete_rn = true
               rn = ds.row_number_column
               ds = apply_window_function_eager_limit_strategy(ds, opts)
-            when :correlated_subquery
-              ds = apply_correlated_subquery_eager_limit_strategy(ds, opts) do |xds|
-                dsa = ds.send(:dataset_alias, 2)
-                opts.reverse_edges.each{|t| xds = xds.join(t[:table], Array(t[:left]).zip(Array(t[:right])), :table_alias=>t[:alias])}
-                xds.join(ft[:table], Array(ft[:left]).zip(Array(ft[:right])) + left_keys.map{|k| [k, SQL::QualifiedIdentifier.new(ft[:table], k)]}, :table_alias=>dsa, :qualify=>:deep)
-              end
             end
             ds.all do |assoc_record|
               assoc_record.values.delete(rn) if delete_rn
@@ -231,8 +225,7 @@ module Sequel
               objects.each{|object| object.associations[name].push(assoc_record)}
             end
             if opts.eager_limit_strategy == :ruby
-              limit, offset = opts.limit_and_offset
-              rows.each{|o| o.associations[name] = o.associations[name].slice(offset||0, limit) || []}
+              rows.each{|o| o.associations[name] = o.associations[name][slice_range] || []}
             end
           end
 

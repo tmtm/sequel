@@ -748,6 +748,10 @@ describe "Sequel core extension replacements" do
     Sequel.blob(o).should equal(o)
   end
 
+  it "Sequel.deep_qualify should do a deep qualification into nested structors" do
+    l(Sequel.deep_qualify(:t, Sequel.+(:c, 1)), "(t.c + 1)")
+  end
+
   it "Sequel.qualify should return a qualified identifier" do
     l(Sequel.qualify(:t, :c), "t.c")
   end
@@ -798,6 +802,8 @@ describe "Sequel core extension replacements" do
     l(Sequel.subscript(:a, 1), 'a[1]')
     l(Sequel.subscript(:a, 1, 2), 'a[1, 2]')
     l(Sequel.subscript(:a, [1, 2]), 'a[1, 2]')
+    l(Sequel.subscript(:a, 1..2), 'a[1:2]')
+    l(Sequel.subscript(:a, 1...3), 'a[1:2]')
   end
 
   it "Sequel.function should return an SQL function" do
@@ -1010,19 +1016,31 @@ describe "Sequel.delay" do
   end
 end
 
-describe "Sequel.parse_json" do
+describe Sequel do
   before do
-    Sequel::JSON = Object.new
-    def (Sequel::JSON).parse(json, opts={})
-      [json, opts]
+    Sequel::JSON = Class.new do
+      self::ParserError = Sequel
+      def self.parse(json, opts={})
+        [json, opts]
+      end
     end
   end
   after do
     Sequel.send(:remove_const, :JSON)
   end
 
-  specify "should parse json correctly" do
+  specify ".parse_json should parse json correctly" do
     Sequel.parse_json('[]').should == ['[]', {:create_additions=>false}]
+  end
+
+  specify ".json_parser_error_class should return the related parser error class" do
+    Sequel.json_parser_error_class.should == Sequel
+  end
+
+  specify ".object_to_json should return a json version of the object" do
+    o = Object.new
+    def o.to_json(*args); [1, args]; end
+    Sequel.object_to_json(o, :foo).should == [1, [:foo]]
   end
 end
 

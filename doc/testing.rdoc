@@ -147,6 +147,10 @@ Sequel は複数に別れたテストスイートを持ちます。すべての�
 +spec_plugin+ rake タスクは Sequel に含まれるプラグインと拡張の sepc を実行します。
 これらもモックデータベース接続を使用し、一般的な Sequel コアとモデル spec にとても似た操作をします。
 
+== rake spec_core_ext
+
+The +spec_core_ext+ rake task runs the specs for the core_extensions extension.  These are run separately from the other extension tests to make sure none of the other extensions require the core_extensions.
+
 == rake spec_bin
 
 The +spec_bin+ rake task runs the specs for bin/sequel.  These use an SQLite3 database, and require either the sqlite3 (non-JRuby) or jdbc-sqlite3 (JRuby) gem.
@@ -174,20 +178,11 @@ Sequel does not create test databases automatically, except for file-based datab
 
 === 接続文字列
 
-次の環境変数はデータベース接続 URL 文字列を指定します:
-
-* SEQUEL_INTEGRATION_URL: integration specs
-* SEQUEL_FB_SPEC_DB: firebird adapter specs
-* SEQUEL_MSSQL_SPEC_DB: mssql adapter specs
-* SEQUEL_PG_SPEC_DB: postgres adapter specs
-* SEQUEL_SQLITE_SPEC_DB: sqlite adapter specs
-* SEQUEL_MY_SPEC_DB: mysql adapter specs
-* SEQUEL_DB2_SPEC_DB: db2 adapter specs
+SEQUEL_INTEGRATION_URL 環境変数は、アダプタと統合 spec で使用するためのデータベース接続 URL を指定します。
+さらに、アダプタ spec で実行時には、SEQUEL_<i>ADAPTER</i>_URL 環境変数(例: spec_postgres には SEQUEL_POSTGRES_URL)も使用できます。
 
 === その他
 
-* SEQUEL_MSSQL_SPEC_REQUIRE: mssql アダプタ spec の実行時に必要とするファイルを分離する
-* SEQUEL_DB2_SPEC_REQUIRE: db2 アダプタ spec の実行時に必要とするファイルを分離する
-* SEQUEL_COLUMNS_INTROSPECTION: デフォルトでロードされる columns_introspection 拡張で spec を実行するかどうか
-* SEQUEL_NO_PENDING: どの spec もペンディングとしてマークせず、すべての spec をトライする
-* SKIPPED_TEST_WARN: ライブラリが有効でないためにテストをスキップした時に警告する
+SEQUEL_COLUMNS_INTROSPECTION :: デフォルトでロードされる columns_introspection 拡張で spec を実行するかどうか
+SEQUEL_NO_PENDING :: どの spec もペンディングとしてマークせず、すべての spec をトライする
+SKIPPED_TEST_WARN :: ライブラリが有効でないためにテストをスキップした時に警告する

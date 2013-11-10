@@ -6,7 +6,7 @@ describe "Model attribute setters" do
       columns :id, :x, :y, :"x y"
     end
     @o = @c.new
-    MODEL_DB.reset
+    DB.reset
   end
 
   specify "refresh should return self" do
@@ -47,7 +47,7 @@ describe "Model.def_column_alias" do
       columns :id
       def_column_alias(:id2, :id)
     end.load(:id=>1)
-    MODEL_DB.reset
+    DB.reset
   end
 
   it "should create an getter alias for the column" do
@@ -412,6 +412,8 @@ describe "Model.db" do
       class ModelTest2 < Sequel::Model(@db[:foo])
         db.should == @db
       end
+      ModelTest.instance_variable_set(:@db, nil)
+      ModelTest.db.should == @db
     ensure
       Object.send(:remove_const, :ModelTest)
       Object.send(:remove_const, :ModelTest2)
@@ -462,14 +464,6 @@ describe Sequel::Model, ".(allowed|restricted)_columns " do
     @c.allowed_columns.should == [:x, :y]
   end
 
-  qspecify "should set the restricted columns correctly" do
-    @c.restricted_columns.should == nil
-    @c.set_restricted_columns :x
-    @c.restricted_columns.should == [:x]
-    @c.set_restricted_columns :x, :y
-    @c.restricted_columns.should == [:x, :y]
-  end
-
   it "should only set allowed columns by default" do
     @c.set_allowed_columns :x, :y
     i = @c.new(:x => 1, :y => 2, :z => 3)
@@ -481,36 +475,7 @@ describe Sequel::Model, ".(allowed|restricted)_columns " do
     i = @c.new
     i.update(:x => 7, :z => 9)
     i.values.should == {:x => 7}
-    MODEL_DB.sqls.should == ["INSERT INTO blahblah (x) VALUES (7)", "SELECT * FROM blahblah WHERE (id = 10) LIMIT 1"]
-  end
-
-  qspecify "should not set restricted columns by default" do
-    @c.set_restricted_columns :z
-    i = @c.new(:x => 1, :y => 2, :z => 3)
-    i.values.should == {:x => 1, :y => 2}
-    i.set(:x => 4, :y => 5, :z => 6)
-    i.values.should == {:x => 4, :y => 5}
-
-    @c.instance_dataset._fetch = @c.dataset._fetch = {:x => 7}
-    i = @c.new
-    i.update(:x => 7, :z => 9)
-    i.values.should == {:x => 7}
-    MODEL_DB.sqls.should == ["INSERT INTO blahblah (x) VALUES (7)", "SELECT * FROM blahblah WHERE (id = 10) LIMIT 1"]
-  end
-
-  qspecify "should have allowed take precedence over restricted" do
-    @c.set_allowed_columns :x, :y
-    @c.set_restricted_columns :y, :z
-    i = @c.new(:x => 1, :y => 2, :z => 3)
-    i.values.should == {:x => 1, :y => 2}
-    i.set(:x => 4, :y => 5, :z => 6)
-    i.values.should == {:x => 4, :y => 5}
-
-    @c.instance_dataset._fetch = @c.dataset._fetch = {:y => 7}
-    i = @c.new
-    i.update(:y => 7, :z => 9)
-    i.values.should == {:y => 7}
-    MODEL_DB.sqls.should == ["INSERT INTO blahblah (y) VALUES (7)", "SELECT * FROM blahblah WHERE (id = 10) LIMIT 1"]
+    DB.sqls.should == ["INSERT INTO blahblah (x) VALUES (7)", "SELECT * FROM blahblah WHERE (id = 10) LIMIT 1"]
   end
 end
 
@@ -569,17 +534,11 @@ describe Sequel::Model, ".strict_param_setting" do
     proc{@c.create(:z=>1)}.should raise_error(Sequel::Error)
     c = @c.new
     proc{c.set(:z=>1)}.should raise_error(Sequel::Error)
-    proc{c.set_all(:id=>1)}.should raise_error(Sequel::Error)
+    proc{c.set_all(:use_after_commit_rollback => false)}.should raise_error(Sequel::Error)
     proc{c.set_only({:x=>1}, :y)}.should raise_error(Sequel::Error)
     proc{c.update(:z=>1)}.should raise_error(Sequel::Error)
-    proc{c.update_all(:id=>1)}.should raise_error(Sequel::Error)
+    proc{c.update_all(:use_after_commit_rollback=>false)}.should raise_error(Sequel::Error)
     proc{c.update_only({:x=>1}, :y)}.should raise_error(Sequel::Error)
-  end
-
-  qspecify "should raise an error if a missing/restricted column/method is accessed by *_except" do
-    c = @c.new
-    proc{c.set_except({:x=>1}, :x)}.should raise_error(Sequel::Error)
-    proc{c.update_except({:x=>1}, :x)}.should raise_error(Sequel::Error)
   end
 
   it "should be disabled by strict_param_setting = false" do
@@ -591,9 +550,9 @@ end
 
 describe Sequel::Model, ".require_modification" do
   before do
-    @ds1 = MODEL_DB[:items]
+    @ds1 = DB[:items]
     def @ds1.provides_accurate_rows_matched?() false end
-    @ds2 = MODEL_DB[:items]
+    @ds2 = DB[:items]
     def @ds2.provides_accurate_rows_matched?() true end
   end
   after do
@@ -618,7 +577,7 @@ end
 
 describe Sequel::Model, ".[] optimization" do
   before do
-    @db = MODEL_DB.clone
+    @db = DB.clone
     @db.quote_identifiers = true
     @c = Class.new(Sequel::Model(@db))
   end
@@ -700,47 +659,47 @@ describe "Model datasets #with_pk with #with_pk!" do
     @c = Class.new(Sequel::Model(:a))
     @ds = @c.dataset
     @ds._fetch = {:id=>1}
-    MODEL_DB.reset
+    DB.reset
   end
 
   it "should be callable on the model class with optimized SQL" do
     @c.with_pk(1).should == @c.load(:id=>1)
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE id = 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE id = 1"]
     @c.with_pk!(1).should == @c.load(:id=>1)
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE id = 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE id = 1"]
   end
 
   it "should return the first record where the primary key matches" do
     @ds.with_pk(1).should == @c.load(:id=>1)
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 1) LIMIT 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 1) LIMIT 1"]
     @ds.with_pk!(1).should == @c.load(:id=>1)
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 1) LIMIT 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 1) LIMIT 1"]
   end
 
   it "should handle existing filters" do
     @ds.filter(:a=>2).with_pk(1)
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE ((a = 2) AND (a.id = 1)) LIMIT 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE ((a = 2) AND (a.id = 1)) LIMIT 1"]
     @ds.filter(:a=>2).with_pk!(1)
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE ((a = 2) AND (a.id = 1)) LIMIT 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE ((a = 2) AND (a.id = 1)) LIMIT 1"]
   end
 
   it "should work with string values" do
     @ds.with_pk("foo")
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 'foo') LIMIT 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 'foo') LIMIT 1"]
     @ds.with_pk!("foo")
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 'foo') LIMIT 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 'foo') LIMIT 1"]
   end
 
   it "should handle an array for composite primary keys" do
     @c.set_primary_key [:id1, :id2]
     @ds.with_pk([1, 2])
-    sqls = MODEL_DB.sqls
+    sqls = DB.sqls
     ["SELECT * FROM a WHERE ((a.id1 = 1) AND (a.id2 = 2)) LIMIT 1",
     "SELECT * FROM a WHERE ((a.id2 = 2) AND (a.id1 = 1)) LIMIT 1"].should include(sqls.pop)
     sqls.should == []
 
     @ds.with_pk!([1, 2])
-    sqls = MODEL_DB.sqls
+    sqls = DB.sqls
     ["SELECT * FROM a WHERE ((a.id1 = 1) AND (a.id2 = 2)) LIMIT 1",
     "SELECT * FROM a WHERE ((a.id2 = 2) AND (a.id1 = 1)) LIMIT 1"].should include(sqls.pop)
     sqls.should == []
@@ -749,26 +708,26 @@ describe "Model datasets #with_pk with #with_pk!" do
   it "should have with_pk return nil and with_pk! raise if no rows match" do
     @ds._fetch = []
     @ds.with_pk(1).should == nil
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 1) LIMIT 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 1) LIMIT 1"]
     proc{@ds.with_pk!(1)}.should raise_error(Sequel::NoMatchingRow)
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 1) LIMIT 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 1) LIMIT 1"]
   end
 
   it "should have with_pk return nil and with_pk! raise if no rows match when calling the class method" do
     @ds._fetch = []
     @c.with_pk(1).should == nil
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE id = 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE id = 1"]
     proc{@c.with_pk!(1)}.should raise_error(Sequel::NoMatchingRow)
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE id = 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE id = 1"]
   end
 
   it "should have #[] consider an integer as a primary key lookup" do
     @ds[1].should == @c.load(:id=>1)
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 1) LIMIT 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE (a.id = 1) LIMIT 1"]
   end
 
   it "should not have #[] consider a string as a primary key lookup" do
     @ds['foo'].should == @c.load(:id=>1)
-    MODEL_DB.sqls.should == ["SELECT * FROM a WHERE (foo) LIMIT 1"]
+    DB.sqls.should == ["SELECT * FROM a WHERE (foo) LIMIT 1"]
   end
 end
