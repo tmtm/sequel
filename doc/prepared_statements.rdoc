@@ -21,6 +21,12 @@ prepared_statements モデルプラグインを使用すると、いくつかの
 
   ds = DB[:items].where(:name=>:$n)
 
+You can use these placeholders in most places where you can use the value
+directly.  For example, if you want to use placeholders while also using
+raw SQL, you can do:
+
+  ds = DB["SELECT * FROM items WHERE name = ?", :$n]
+
 == 束縛変数
 
 このクエリの束縛変数の使用はシンプルです:

@@ -636,8 +636,10 @@ module Sequel
         case constraint[:type]
         when :exclude
           elements = constraint[:elements].map{|c, op| "#{literal(c)} WITH #{op}"}.join(', ')
-          "#{"CONSTRAINT #{quote_identifier(constraint[:name])} " if constraint[:name]}EXCLUDE USING #{constraint[:using]||'gist'} (#{elements})#{" WHERE #{filter_expr(constraint[:where])}" if constraint[:where]}"
-        when :foreign_key
+          sql = "#{"CONSTRAINT #{quote_identifier(constraint[:name])} " if constraint[:name]}EXCLUDE USING #{constraint[:using]||'gist'} (#{elements})#{" WHERE #{filter_expr(constraint[:where])}" if constraint[:where]}"
+          constraint_deferrable_sql_append(sql, constraint[:deferrable])
+          sql
+        when :foreign_key, :check
           sql = super
           if constraint[:not_valid]
             sql << " NOT VALID"
@@ -768,6 +770,14 @@ module Sequel
         "CREATE #{temp_or_unlogged_sql}TABLE#{' IF NOT EXISTS' if options[:if_not_exists]} #{options[:temp] ? quote_identifier(name) : quote_schema_table(name)}"
       end
 
+      def create_table_sql(name, generator, options)
+        sql = super
+        if inherits = options[:inherits]
+          sql << " INHERITS (#{Array(inherits).map{|t| quote_schema_table(t)}.join(', ')})"
+        end
+        sql
+      end
+
       # Use a PostgreSQL-specific create table generator
       def create_table_generator_class
         Postgres::CreateTableGenerator
@@ -797,7 +807,8 @@ module Sequel
       
       # Support :if_exists, :cascade, and :concurrently options.
       def drop_index_sql(table, op)
-        "DROP INDEX#{' CONCURRENTLY' if op[:concurrently]}#{' IF EXISTS' if op[:if_exists]} #{quote_identifier(op[:name] || default_index_name(table, op[:columns]))}#{' CASCADE' if op[:cascade]}"
+        sch, _ = schema_and_table(table)
+        "DROP INDEX#{' CONCURRENTLY' if op[:concurrently]}#{' IF EXISTS' if op[:if_exists]} #{"#{quote_identifier(sch)}." if sch}#{quote_identifier(op[:name] || default_index_name(table, op[:columns]))}#{' CASCADE' if op[:cascade]}"
       end
 
       # SQL for dropping a procedural language from the database.

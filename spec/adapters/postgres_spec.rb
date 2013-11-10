@@ -17,8 +17,7 @@ describe "PostgreSQL", '#create_table' do
     DB.sqls.clear
   end
   after do
-    @db.drop_table?(:tmp_dolls)
-    @db.drop_table?(:unlogged_dolls)
+    @db.drop_table?(:tmp_dolls, :unlogged_dolls)
   end
 
   specify "should create a temporary table" do
@@ -32,6 +31,27 @@ describe "PostgreSQL", '#create_table' do
     @db.create_table(:unlogged_dolls, :unlogged => true){text :name}
     check_sqls do
       @db.sqls.should == ['CREATE UNLOGGED TABLE "unlogged_dolls" ("name" text)']
+    end
+  end
+
+  specify "should create a table inheriting from another table" do
+    @db.create_table(:unlogged_dolls){text :name}
+    @db.create_table(:tmp_dolls, :inherits=>:unlogged_dolls){}
+    @db[:tmp_dolls].insert('a')
+    @db[:unlogged_dolls].all.should == [{:name=>'a'}]
+  end
+
+  specify "should create a table inheriting from multiple tables" do
+    begin
+      @db.create_table(:unlogged_dolls){text :name}
+      @db.create_table(:tmp_dolls){text :bar}
+      @db.create_table!(:items, :inherits=>[:unlogged_dolls, :tmp_dolls]){text :foo}
+      @db[:items].insert(:name=>'a', :bar=>'b', :foo=>'c')
+      @db[:unlogged_dolls].all.should == [{:name=>'a'}]
+      @db[:tmp_dolls].all.should == [{:bar=>'b'}]
+      @db[:items].all.should == [{:name=>'a', :bar=>'b', :foo=>'c'}]
+    ensure
+      @db.drop_table?(:items)
     end
   end
 
@@ -232,6 +252,43 @@ describe "A PostgreSQL dataset" do
     proc{@db[:atest].insert(2)}.should raise_error(Sequel::Postgres::ExclusionConstraintViolation)
     @db.alter_table(:atest){drop_constraint 'atest_ex'}
   end if DB.server_version >= 90000
+  
+  specify "should support deferrable exclusion constraints" do
+    @db.create_table!(:atest){Integer :t; exclude [[Sequel.desc(:t, :nulls=>:last), '=']], :using=>:btree, :where=>proc{t > 0}, :deferrable => true}
+    proc do 
+      @db.transaction do
+        @db[:atest].insert(2)
+        proc{@db[:atest].insert(2)}.should_not raise_error
+      end
+    end.should raise_error(Sequel::Postgres::ExclusionConstraintViolation)
+  end if DB.server_version >= 90000
+
+  specify "should support Database#error_info for getting info hash on the given error" do
+    @db.create_table!(:atest){Integer :t; Integer :t2, :null=>false, :default=>1; constraint :f, :t=>0}
+    begin
+      @db[:atest].insert(1)
+    rescue => e
+    end
+    e.should_not be_nil
+    info = @db.error_info(e)
+    info[:schema].should == 'public'
+    info[:table].should == 'atest'
+    info[:constraint].should == 'f'
+    info[:column].should be_nil
+    info[:type].should be_nil
+
+    begin
+      @db[:atest].insert(0, nil)
+    rescue => e
+    end
+    e.should_not be_nil
+    info = @db.error_info(e.wrapped_exception)
+    info[:schema].should == 'public'
+    info[:table].should == 'atest'
+    info[:constraint].should be_nil
+    info[:column].should == 't2'
+    info[:type].should be_nil
+  end if DB.server_version >= 90300 && DB.adapter_scheme == :postgres && SEQUEL_POSTGRES_USES_PG && Object.const_defined?(:PG) && ::PG.const_defined?(:Constants) && ::PG::Constants.const_defined?(:PG_DIAG_SCHEMA_NAME)
 
   specify "should support Database#do for executing anonymous code blocks" do
     @db.drop_table?(:btest)
@@ -253,6 +310,19 @@ describe "A PostgreSQL dataset" do
     @db[:atest].where(:id=>1).update(:fk=>2)
     @db.alter_table(:atest){validate_constraint :atest_fk}
     proc{@db.alter_table(:atest){validate_constraint :atest_fk}}.should_not raise_error
+  end if DB.server_version >= 90200
+
+  specify "should support adding check constarints that are not yet valid, and validating them later" do
+    @db.create_table!(:atest){Integer :a}
+    @db[:atest].insert(5)
+    @db.alter_table(:atest){add_constraint({:name=>:atest_check, :not_valid=>true}){a >= 10}}
+    @db[:atest].insert(10)
+    proc{@db[:atest].insert(6)}.should raise_error(Sequel::DatabaseError)
+
+    proc{@db.alter_table(:atest){validate_constraint :atest_check}}.should raise_error(Sequel::DatabaseError)
+    @db[:atest].where{a < 10}.update(:a=>Sequel.+(:a, 10))
+    @db.alter_table(:atest){validate_constraint :atest_check}
+    proc{@db.alter_table(:atest){validate_constraint :atest_check}}.should_not raise_error
   end if DB.server_version >= 90200
 
   specify "should support :using when altering a column's type" do
@@ -925,6 +995,13 @@ describe "Postgres::Database schema qualified tables" do
   specify "#table_exists? should see if the table is in a given schema" do
     @db.create_table(:schema_test__schema_test){integer :i}
     @db.table_exists?(:schema_test__schema_test).should == true
+  end
+
+  specify "should be able to add and drop indexes in a schema" do
+    @db.create_table(:schema_test__schema_test){Integer :i, :index=>true}
+    @db.indexes(:schema_test__schema_test).keys.should == [:schema_test_schema_test_i_index]
+    @db.drop_index :schema_test__schema_test, :i
+    @db.indexes(:schema_test__schema_test).keys.should == []
   end
 
   specify "should be able to get primary keys for tables in a given schema" do

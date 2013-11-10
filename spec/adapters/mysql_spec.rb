@@ -1070,27 +1070,6 @@ describe "MySQL::Dataset#replace" do
     @d.replace({})
     @d.all.should == [{:id=>1, :value=>2}]
   end
-
-  specify "should use support arrays, datasets, and multiple values" do
-    @d.replace([1, 2])
-    @d.all.should == [{:id=>1, :value=>2}]
-    @d.replace(1, 2)
-    @d.all.should == [{:id=>1, :value=>2}]
-    @d.replace(@d)
-    @d.all.should == [{:id=>1, :value=>2}]
-  end
-
-  specify "should create a record if the condition is not met" do
-    @d.replace(:id => 111, :value => 333)
-    @d.all.should == [{:id => 111, :value => 333}]
-  end
-
-  specify "should update a record if the condition is met" do
-    @d << {:id => 111}
-    @d.all.should == [{:id => 111, :value => nil}]
-    @d.replace(:id => 111, :value => 333)
-    @d.all.should == [{:id => 111, :value => 333}]
-  end
 end
 
 describe "MySQL::Dataset#complex_expression_sql" do
@@ -1303,5 +1282,5 @@ if DB.adapter_scheme == :mysql2
     specify "should correctly handle early returning when streaming results" do
       3.times{@ds.each{|r| break r[:a]}.should == 0}
     end
-  end if false
+  end
 end
