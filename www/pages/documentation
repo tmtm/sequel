@@ -32,12 +32,14 @@
     <li><a href="rdoc/files/doc/model_hooks_rdoc.html">Model Hooks</a></li>
     <li><a href="rdoc/files/doc/association_basics_rdoc.html">Model Associations Basics and Options</a></li>
     <li><a href="rdoc/files/doc/advanced_associations_rdoc.html">Advanced Model Associations</a></li>
+    <li><a href="rdoc/files/doc/model_plugins_rdoc.html">Model Plugins</a></li>
   </ul></li>
   <li>Misc.<ul>
     <li><a href="rdoc/files/doc/code_order_rdoc.html">Code Order</a></li>
     <li><a href="rdoc/files/doc/reflection_rdoc.html">Reflection</a></li>
     <li><a href="rdoc/files/doc/thread_safety_rdoc.html">Thread Safety</a></li>
     <li><a href="rdoc/files/doc/testing_rdoc.html">Testing With Sequel</a></li>
+    <li><a href="rdoc/files/doc/extensions_rdoc.html">Sequel Extensions</a></li>
     <li><a href="rdoc/files/doc/core_extensions_rdoc.html">Core Extensions</a></li>
     <li><a href="rdoc/files/doc/bin_sequel_rdoc.html">bin/sequel</a></li>
   </ul></li>
@@ -95,6 +97,7 @@
 <h3>Presentations</h3>
 
 <ul>
+<li><a href="http://jeremyevans-pres.heroku.com/railsclub2013/index.html?trans=no">Jeremy Evans's &quot;Give-and-Go with PostgreSQL and Sequel&quot; Presentation at RailsClub 2013</a> (<a href="http://jeremyevans-pres.heroku.com/railsclub2013/index.html">In Russian</a>)</li>
 <li><a href="http://jeremyevans-pres.heroku.com/heroku201205/index.html">Jeremy Evans's &quot;The Development of Sequel&quot; Presentation in May 2012 at Heroku</a></li>
 <li><a href="http://jeremyevans-pres.heroku.com/pgwest2011/index.html">Jeremy Evans's &quot;Sequel: The Database Toolkit for Ruby&quot; Presentation at PostgreSQL Conference West 2011</a></li>
 <li><a href="http://jeremyevans-pres.heroku.com/lsrc2009_presentation/sequel-lsrc2009.html">Jeremy Evans's &quot;Sequel: SQL in Ruby&quot; Presentation at Lone Star Ruby Conference 2009</a></li>

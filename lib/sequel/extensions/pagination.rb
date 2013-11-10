@@ -28,9 +28,11 @@ module Sequel
     end
       
     # Yields a paginated dataset for each page and returns the receiver. Does
-    # a count to find the total number of records for this dataset.
+    # a count to find the total number of records for this dataset. Returns
+    # an enumerator if no block is given.
     def each_page(page_size)
       raise(Error, "You cannot paginate a dataset that already has a limit") if @opts[:limit]
+      return to_enum(:each_page, page_size) unless block_given?
       record_count = count
       total_pages = (record_count / page_size.to_f).ceil
       (1..total_pages).each{|page_no| yield paginate(page_no, page_size, record_count)}
@@ -47,7 +49,8 @@ module Sequel
       attr_accessor :page_size
 
       # The number of pages in the dataset before pagination, of which
-      # this paginated dataset is one.
+      # this paginated dataset is one.  Empty datasets are considered
+      # to have a single page.
       attr_accessor :page_count
 
       # The current page of the dataset, starting at 1 and not 0.
@@ -107,6 +110,7 @@ module Sequel
         @page_size = page_size
         @pagination_record_count = record_count
         @page_count = (record_count / page_size.to_f).ceil
+        @page_count = 1 if @page_count == 0
         self
       end
     end

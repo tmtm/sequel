@@ -3542,6 +3542,14 @@ describe "Sequel::Dataset#qualify" do
     @ds.select{sum(:over, :args=>:a, :partition=>:b, :order=>:c){}}.qualify.sql.should == 'SELECT sum(t.a) OVER (PARTITION BY t.b ORDER BY t.c) FROM t'
   end
 
+  specify "should handle SQL::DelayedEvaluation" do
+    t = :a
+    ds = @ds.filter(Sequel.delay{t}).qualify
+    ds.sql.should == 'SELECT t.* FROM t WHERE t.a'
+    t = :b
+    ds.sql.should == 'SELECT t.* FROM t WHERE t.b'
+  end
+
   specify "should handle all other objects by returning them unchanged" do
     @ds.select("a").filter{a(3)}.filter('blah').order(Sequel.lit('true')).group(Sequel.lit('a > ?', 1)).having(false).qualify.sql.should == "SELECT 'a' FROM t WHERE (a(3) AND (blah)) GROUP BY a > 1 HAVING 'f' ORDER BY true"
   end
@@ -4526,6 +4534,12 @@ end
 describe "Dataset#supports_replace?" do
   it "should be false by default" do
     Sequel::Dataset.new(nil).supports_replace?.should be_false
+  end
+end
+
+describe "Dataset#supports_lateral_subqueries?" do
+  it "should be false by default" do
+    Sequel::Dataset.new(nil).supports_lateral_subqueries?.should be_false
   end
 end
 

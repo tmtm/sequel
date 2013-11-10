@@ -11,6 +11,8 @@ describe "A paginated dataset" do
   specify "should raise an error if the dataset already has a limit" do
     proc{@d.limit(10).paginate(1,10)}.should raise_error(Sequel::Error)
     proc{@paginated.paginate(2,20)}.should raise_error(Sequel::Error)
+    proc{@d.limit(10).each_page(10){|ds|}}.should raise_error(Sequel::Error)
+    proc{@d.limit(10).each_page(10)}.should raise_error(Sequel::Error)
   end
   
   specify "should set the limit and offset options correctly" do
@@ -21,6 +23,9 @@ describe "A paginated dataset" do
   specify "should set the page count correctly" do
     @paginated.page_count.should == 8
     @d.paginate(1, 50).page_count.should == 4
+
+    @d.meta_def(:count) {0}
+    @d.paginate(1, 50).page_count.should == 1
   end
   
   specify "should set the current page number correctly" do
@@ -61,6 +66,10 @@ describe "A paginated dataset" do
     @d.paginate(2, 20).last_page?.should be_false
     @d.paginate(5, 30).last_page?.should be_false
     @d.paginate(6, 30).last_page?.should be_true
+
+    @d.meta_def(:count) {0}
+    @d.paginate(1, 30).last_page?.should be_true
+    @d.paginate(2, 30).last_page?.should be_false
   end
 
   specify "should know if current page is first page" do
@@ -90,6 +99,16 @@ describe "Dataset#each_page" do
     a = []
     @d.each_page(50) {|p| a << p}
     a.map {|p| p.sql}.should == [
+      'SELECT * FROM items LIMIT 50 OFFSET 0',
+      'SELECT * FROM items LIMIT 50 OFFSET 50',
+      'SELECT * FROM items LIMIT 50 OFFSET 100',
+      'SELECT * FROM items LIMIT 50 OFFSET 150',
+    ]
+  end
+
+  specify "should return an enumerator if no block is given" do
+    enum = @d.each_page(50)
+    enum.map {|p| p.sql}.should == [
       'SELECT * FROM items LIMIT 50 OFFSET 0',
       'SELECT * FROM items LIMIT 50 OFFSET 50',
       'SELECT * FROM items LIMIT 50 OFFSET 100',
