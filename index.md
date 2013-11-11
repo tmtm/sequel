@@ -3,8 +3,7 @@ Sequel 勝手に日本語訳
 
 Sequel のドキュメントを勝手に日本語に訳してます。
 
-自分は英語が苦手で、英語のドキュメントをそのまま読んでも3行進むと忘れてしまうので、日本語に訳したものを記録しながら読むようにしています。
-つまり自分の理解用のものでかなりテキトーな訳なので、あまり信用してはいけません。
+個人的な理解用のものでかなりテキトーな訳なので、あまり信用してはいけません。
 
 * [README.rdoc](https://github.com/tmtm/sequel/blob/ja/README.rdoc)
 * [Sequel for ActiveRecord Users](https://github.com/tmtm/sequel/blob/ja/doc/active_record.rdoc) (未)
@@ -12,9 +11,11 @@ Sequel のドキュメントを勝手に日本語に訳してます。
 * [Association Basics](https://github.com/tmtm/sequel/blob/ja/doc/association_basics.rdoc) (未)
 * [bin/sequel](https://github.com/tmtm/sequel/blob/ja/doc/bin_sequel.rdoc)
 * [チートシート](https://github.com/tmtm/sequel/blob/ja/doc/cheat_sheet.rdoc)
+* [Code Order](https://github.com/tmtm/sequel/blob/ja/doc/cheat_sheet.rdoc) (未)
 * [Sequel's Core Extensions](https://github.com/tmtm/sequel/blob/ja/doc/core_extensions.rdoc) (未)
 * [データセットの基本](https://github.com/tmtm/sequel/blob/ja/doc/dataset_basics.rdoc)
 * [データセットフィルタリング](https://github.com/tmtm/sequel/blob/ja/doc/dataset_filtering.rdoc)
+* [Sequel Extensions](https://github.com/tmtm/sequel/blob/ja/doc/extensions.rdoc) (未)
 * [Sequel::Model 一括割り当て(Mass Assignment)](https://github.com/tmtm/sequel/blob/ja/doc/mass_assignment.rdoc)
 * [Migrations](https://github.com/tmtm/sequel/blob/ja/doc/migration.rdoc) (未)
 * [Model Hooks](https://github.com/tmtm/sequel/blob/ja/doc/model_hooks.rdoc) (未)
