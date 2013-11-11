@@ -108,13 +108,14 @@ Model.all_association_reflections で、すべてのアソシエーションリ�
 
   Model.association_reflections # {:association1=>{:name=>:association1, :type=>:many_to_one, :model=>Model, ...}, ...}
 
-== Validations Defined
+== バリデーション定義
 
-When using the validation_class_methods plugin, you can use the validation_reflections class method to get a hash with validation reflection information.  This returns a hash keyed on the column name symbol:
+validation_class_methods プラグインを使用すると、 validation_reflections クラスメソッドを使用してバリデーションリフレクション情報のハッシュを得ることができます。
+これはカラム名のシンボルがキーのハッシュを返します:
 
   Model.validation_reflections[:column] # => [[:presence, {}], [:length, {:maximum=>255, :message=>'is just too long'}]]
 
-Similarly, when using the constraint_validations plugin, you can use the constraint_validation_reflections class method:
+同様に、constraint_validations プラグインを使用して、constraint_validation_reflections クラスメソッドを使用できます:
 
   Model.constraint_validation_reflections[:column] # => [[:presence, {}], [:max_length, {:argument=>255, :message=>'is just too long'}]]
 

@@ -153,7 +153,7 @@ The +spec_core_ext+ rake task runs the specs for the core_extensions extension. 
 
 == rake spec_bin
 
-The +spec_bin+ rake task runs the specs for bin/sequel.  These use an SQLite3 database, and require either the sqlite3 (non-JRuby) or jdbc-sqlite3 (JRuby) gem.
++spec_bin+ rake タスクは、bin/sequel の spec を実行します。これらは SQLite3 データベースを使用し、sqlite3  (非JRuby) または jdbc-sqlite3 (JRuby) gem のどちらかを require します。
 
 == rake spec_<i>adapter</i> (例えば rake spec_postgres)
 
@@ -165,7 +165,7 @@ The +spec_bin+ rake task runs the specs for bin/sequel.  These use an SQLite3 da
 各データベースについて、データベースに適用するだけの特殊な spec があります。これらはアダプタ spec (adapter spec)と呼ばれます。
 すべての(またはほとんどすべての)データベースに適用される共有 spec もあります。
 これらは統合 spec (integration spec)と呼ばれます。
-For database types that don't have specific adapter tests, you can use rake spec_integration to just run the shared integration tests.
+特定のアダプタテストを持たないデータベースタイプでは、rake spec_integration を使用して、共有統合テストを実行することができます。
 
 == 環境変数
 
@@ -174,7 +174,7 @@ spec/spec_config.rb.example を spec/spec_config.rb にコピーして、それ�
 詳細はファイルを見てください。
 データベース接続が接続文字列で指定できない場合は、環境変数ではなく spec_config.rb を使用する必要があるでしょう。
 
-Sequel does not create test databases automatically, except for file-based databases such as SQLite/H2/HSQLDB/Derby.  It's up to the user to create the test databases manually and give Sequel a valid connection string in an environment variable (or setup the connection object in spec_config.rb).
+Sequel はテストデータベースを自動的には生成しません。SQLite/H2/HSQLDB/Derby のようなファイルベースのデータベースを除きます。テストデータベースを手動で生成して、Sequel に正しい接続文字列を環境変数で与える(または spec_config.rb で接続オブジェクトをセットアップする)ことはユーザーに任されています。
 
 === 接続文字列
 
@@ -184,8 +184,8 @@ SEQUEL_INTEGRATION_URL 環境変数は、アダプタと統合 spec で使用す
 === その他
 
 SEQUEL_COLUMNS_INTROSPECTION :: デフォルトでロードされる columns_introspection 拡張で spec を実行するかどうか
-SEQUEL_CONNECTION_VALIDATOR :: Use the connection validator extension when running the specs
-SEQUEL_ERROR_SQL :: Use the error_sql extension when running the specs
-SEQUEL_NO_CHECK_SQLS :: Don't check for specific SQL syntax when running the specs
+SEQUEL_CONNECTION_VALIDATOR :: spec 実行時に接続バリデーター拡張を使用する
+SEQUEL_ERROR_SQL :: spec 実行時に error_sql 拡張を使用する
+SEQUEL_NO_CHECK_SQLS :: spec 実行時に特定の SQL 構文をチェックしない
 SEQUEL_NO_PENDING :: どの spec もペンディングとしてマークせず、すべての spec をトライする
 SKIPPED_TEST_WARN :: ライブラリが有効でないためにテストをスキップした時に警告する

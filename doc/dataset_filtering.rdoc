@@ -145,7 +145,7 @@ Sequel.like メソッドを使用して大文字小文字を区別して SQL 文
   items.where(Sequel.like(:name, 'Acme%')).sql
   #=> "SELECT * FROM items WHERE (name LIKE 'Acme%')"
 
-You can search SQL strings in a case insensitive manner using the Sequel.ilike method:
+Sequel.ilike メソッドを使用して大文字小文字を区別せずに SQL 文字列を検索できます:
 
   items.where(Sequel.ilike(:name, 'Acme%')).sql
   #=> "SELECT * FROM items WHERE (name ILIKE 'Acme%')"
