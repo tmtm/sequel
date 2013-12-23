@@ -36,6 +36,9 @@
 #
 #   DB.extension :pg_array
 #
+# See the {schema modification guide}[rdoc-ref:doc/schema_modification.rdoc]
+# for details on using postgres array columns in CREATE/ALTER TABLE statements.
+#
 # If you are not using the native postgres adapter and are using array
 # types as model column values you probably should use the
 # typecast_on_load plugin if the column values are returned as a

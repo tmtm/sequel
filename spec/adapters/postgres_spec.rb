@@ -27,6 +27,46 @@ describe "PostgreSQL", '#create_table' do
     end
   end
 
+  specify "temporary table should support :on_commit option" do
+    @db.drop_table?(:some_table)
+    @db.transaction do
+      @db.create_table(:some_table, :temp => true, :on_commit => :drop){text :name}
+    end
+    @db.table_exists?(:some_table).should be_false
+
+    @db.transaction do
+      @db.create_table(:some_table, :temp => true, :on_commit => :delete_rows){text :name}
+      @db[:some_table].insert('a')
+    end
+    @db.table_exists?(:some_table).should be_true
+    @db[:some_table].empty?.should be_true
+
+    @db.drop_table(:some_table)
+    @db.transaction do
+      @db.create_table(:some_table, :temp => true, :on_commit => :preserve_rows){text :name}
+      @db[:some_table].insert('a')
+    end
+    @db.table_exists?(:some_table).should be_true
+    @db[:some_table].count.should == 1
+    @db.drop_table(:some_table)
+  end
+
+  specify "temporary table should accept :on_commit with :as option" do
+    @db.drop_table?(:some_table)
+    @db.transaction do
+      @db.create_table(:some_table, :temp => true, :on_commit => :drop, :as => 'select 1')
+    end
+    @db.table_exists?(:some_table).should be_false
+  end
+
+  specify ":on_commit should raise error if not used on a temporary table" do
+    proc{@db.create_table(:some_table, :on_commit => :drop)}.should raise_error(Sequel::Error)
+  end
+
+  specify ":on_commit should raise error if given unsupported value" do
+    proc{@db.create_table(:some_table, :temp => true, :on_commit => :unsupported){text :name}}.should raise_error(Sequel::Error)
+  end
+
   specify "should create an unlogged table" do
     @db.create_table(:unlogged_dolls, :unlogged => true){text :name}
     check_sqls do
@@ -160,6 +200,12 @@ describe "A PostgreSQL database" do
 
   specify "should return uuid fields as strings" do
     @db.get(Sequel.cast('550e8400-e29b-41d4-a716-446655440000', :uuid)).should == '550e8400-e29b-41d4-a716-446655440000'
+  end
+
+  specify "should handle inserts with placeholder literal string tables" do
+    ds = @db.from(Sequel.lit('?', :testfk))
+    ds.insert(:id=>1)
+    ds.select_map(:id).should == [1]
   end
 end
 

@@ -607,8 +607,8 @@ describe "Database#foreign_key_list" do
       end
     end
     after(:all) do
-      DB.drop_table :vendor__mapping
-      DB.drop_table :vendor__vendors
+      DB.drop_table? :vendor__mapping
+      DB.drop_table? :vendor__vendors
       DB.execute_ddl "drop schema vendor"
     end
     it "should support mixed schema bound tables" do
@@ -616,3 +616,30 @@ describe "Database#foreign_key_list" do
     end
   end
 end
+
+describe "MSSQL optimistic locking plugin" do
+  before do
+    @db = DB
+    @db.create_table! :items do
+      primary_key :id
+      String :name, :size => 20
+      column :timestamp, 'timestamp'
+    end
+   end
+  after do
+    @db.drop_table?(:items)
+  end
+
+  it "should not allow stale updates" do
+    c = Class.new(Sequel::Model(:items))
+    c.plugin :mssql_optimistic_locking
+    o = c.create(:name=>'test')
+    o2 = c.first
+    ts = o.timestamp
+    ts.should_not be_nil
+    o.name = 'test2'
+    o.save
+    o.timestamp.should_not == ts
+    proc{o2.save}.should raise_error(Sequel::NoExistingObject)
+  end
+end unless DB.adapter_scheme == :odbc

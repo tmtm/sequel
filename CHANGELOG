@@ -1,3 +1,21 @@
+=== 4.5.0 (2013-12-02)
+
+* Support :on_commit=>(:drop|:delete_rows|:preserve_rows) options when creating temp tables on PostgreSQL (rosenfeld) (#737)
+
+* Make Dataset#insert work on PostgreSQL if the table name is a SQL::PlaceholderLiteralString (jeremyevans) (#736)
+
+* Copy unique constraints when emulating alter_table operations on SQLite (jeremyevans) (#735)
+
+* Don't return clob column values as SQL::Blob instances in the db2 and ibmdb adapters unless use_clob_as_blob is true (jeremyevans)
+
+* Make use_clob_as_blob false by default on DB2 (jeremyevans)
+
+* Fix usage of Sequel::SQL::Blob objects as prepared statement arguments in jdbc/db2 adapter when use_clob_as_blob is false (jeremyevans)
+
+* Add mssql_optimistic_locking plugin, using a timestamp/rowversion column to protect against concurrent updates (pinx, jeremyevans) (#731)
+
+* Make Model.primary_key array immutable for composite keys (chanks) (#730)
+
 === 4.4.0 (2013-11-01)
 
 * Make Database#tables not show tables in the recycle bin on Oracle (jeremyevans) (#728)
